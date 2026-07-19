@@ -175,6 +175,10 @@ void SetAll(byte v)
 #define EBUF_SIZE 16384      // report buffer; a full 48-test run needs ~6 KB
 #define BAR_W     26         // bar width in characters, same for every row
 
+#define COL_NAME  20         // same columns for test and compare rows, so
+#define COL_SCORE 8          // numbers and bars line up down the whole page
+#define COL_INFO  16
+
 // one copy of each colour; html_head repeats them for browsers that honour
 // <style> - WebView reads bg= straight off the tag
 char c_bar1[] = "#2c7be5";  char c_trk1[] = "#cdd2da";
@@ -256,19 +260,19 @@ void ExportSection(dword sect, title, icon)
 	for (i=0; i<t_count; i++) {
 		if (t_sect[i]==sect) {
 			if (t_done[i]==2) {                    // not applicable here
-				Hfield(t_name[i], 17);
-				Hfield("skipped", 8);
+				Hfield(t_name[i], COL_NAME);
+				Hfield("skipped", COL_SCORE);
 				Hput("\n");
 			}
 			if (t_done[i]==1) {
 				whole = t_raw[i] / 100;  frac = t_raw[i] % 100;
 				if (r & 1) { barcol = #c_bar2;  trkcol = #c_trk2; }
 				else       { barcol = #c_bar1;  trkcol = #c_trk1; }
-				Hfield(t_name[i], 17);
-				sprintf(#etmp, "%d", t_score[i]);  Hfield(#etmp, 8);
+				Hfield(t_name[i], COL_NAME);
+				sprintf(#etmp, "%d", t_score[i]);  Hfield(#etmp, COL_SCORE);
 				if (frac < 10) sprintf(#etmp, "%d.0%d %s", whole, frac, t_unit[i]);
 				else           sprintf(#etmp, "%d.%d %s",  whole, frac, t_unit[i]);
-				Hfield(#etmp, 16);
+				Hfield(#etmp, COL_INFO);
 				Hbar(t_score[i], BAR_FULL, barcol, trkcol);
 				r++;
 			}
@@ -277,14 +281,12 @@ void ExportSection(dword sect, title, icon)
 	Hput("</blockquote>\n");
 }
 
-// name(22) + score(8) + mhz(11) = 41 chars before the bar - exactly like the
-// test rows (17+8+16), so all bars on the page line up.
 void CompareRow(dword name, mhz, score, maxscore, fillcol, trkcol)
 {
 	char sb[20];
-	Hfield(name, 22);
-	sprintf(#sb, "%d", score);    Hfield(#sb, 8);
-	sprintf(#sb, "%d MHz", mhz);  Hfield(#sb, 11);
+	Hfield(name, COL_NAME);
+	sprintf(#sb, "%d", score);    Hfield(#sb, COL_SCORE);
+	sprintf(#sb, "%d MHz", mhz);  Hfield(#sb, COL_INFO);
 	Hbar(score, maxscore, fillcol, trkcol);
 }
 
@@ -299,7 +301,7 @@ void ExportCalib()
 	Hput("score it 1000 everywhere, then bump BB_REVISION and re-measure cpudb.\n\n");
 	for (i=0; i<t_count; i++) {
 		if (t_done[i]==1) {
-			Hfield(t_name[i], 18);
+			Hfield(t_name[i], COL_NAME);
 			sprintf(#etmp, "%d", t_raw[i]);  Hput(#etmp);
 			Hput("\n");
 		}
