@@ -151,7 +151,7 @@ dword t_disk_write()
 	BenchBegin();
 	do {
 		r = FileWrite(#dk_file, buf_disk, DISK_CHUNK);
-		if (r) return 0;      // write error -> score 0
+		if (r) return BB_SKIP;   // write error: no result, not a slow one
 		c += DISK_MB;
 	} while (BenchTicks() < 100);
 	return PerSecX100(c);         // MB/s
@@ -168,7 +168,7 @@ dword t_disk_read()
 	BenchBegin();
 	do {
 		r = FileRead(#dk_file, buf_disk, DISK_CHUNK);
-		if (r!=0) && (r!=6) return 0;   // 6 = EOF (still ok)
+		if (r!=0) && (r!=6) return BB_SKIP;   // 6 = EOF (still ok)
 		c += DISK_MB;
 	} while (BenchTicks() < 100);
 	return PerSecX100(c);         // MB/s
@@ -187,7 +187,7 @@ dword t_disk_rwrite()
 		rnd_state = rnd_state * 1103515245;  rnd_state = rnd_state + 12345;
 		r = rnd_state >> 8;  r = r % RND_NBLK;
 		pos = r * RND_BLK;
-		if (FileWriteAt(#dk_file, buf_disk, RND_BLK, pos)) return 0;
+		if (FileWriteAt(#dk_file, buf_disk, RND_BLK, pos)) return BB_SKIP;
 		c++;
 	} while (BenchTicks() < 100);
 	r = muldiv(c, 40000, BenchTicks()); // KiB/s x100 (c * 4 KiB)
@@ -208,7 +208,7 @@ dword t_disk_rread()
 		r = rnd_state >> 8;  r = r % RND_NBLK;
 		pos = r * RND_BLK;
 		res = FileReadAt(#dk_file, buf_disk, RND_BLK, pos);
-		if (res!=0) && (res!=6) return 0;
+		if (res!=0) && (res!=6) return BB_SKIP;
 		c++;
 	} while (BenchTicks() < 100);
 	r = muldiv(c, 40000, BenchTicks()); // KiB/s x100 (c * 4 KiB)
@@ -270,7 +270,7 @@ dword t_disk_fs()
 		r = dk_delete(#fs_dn);
 		if (r==0) dirs_ok = 1;
 	}
-	if (!files_ok) && (!dirs_ok) return 0;
+	if (!files_ok) && (!dirs_ok) return BB_SKIP;
 	BenchBegin();
 	do {
 		if (files_ok) {
@@ -301,11 +301,11 @@ dword t_disk_fs()
 
 void Register_DISK()
 {
-	RegisterTest(SECT_DISK, "Seq Write",   "MB/s", REF_DWRITE, #t_disk_write);
-	RegisterTest(SECT_DISK, "Seq Read",    "MB/s", REF_DREAD,  #t_disk_read);
-	RegisterTest(SECT_DISK, "Rand Write",  "MB/s", REF_RWRITE, #t_disk_rwrite);
-	RegisterTest(SECT_DISK, "Rand Read",   "MB/s", REF_RREAD,  #t_disk_rread);
-	RegisterTest(SECT_DISK, "File System", "op/s", REF_FS,     #t_disk_fs);
+	RegisterTest(SECT_DISK, "Seq Write",   "MB/s", "REF_DWRITE", REF_DWRITE, #t_disk_write);
+	RegisterTest(SECT_DISK, "Seq Read",    "MB/s", "REF_DREAD", REF_DREAD,  #t_disk_read);
+	RegisterTest(SECT_DISK, "Rand Write",  "MB/s", "REF_RWRITE", REF_RWRITE, #t_disk_rwrite);
+	RegisterTest(SECT_DISK, "Rand Read",   "MB/s", "REF_RREAD", REF_RREAD,  #t_disk_rread);
+	RegisterTest(SECT_DISK, "File System", "op/s", "REF_FS", REF_FS,     #t_disk_fs);
 }
 
 #endif

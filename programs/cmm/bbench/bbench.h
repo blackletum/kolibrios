@@ -13,6 +13,9 @@
 
 #define MAX_TESTS  48
 
+#define BB_REVISION 1          // bump on any change to a test or a REF_ value
+#define BB_SKIP     0xFFFFFFFF // test cannot run here: no score, out of the geomean
+
 // ---- shared work buffers ----
 #define GCV_X 0          // graphics canvas = window body (WIN_W/H tied to these)
 #define GCV_Y 42
@@ -28,21 +31,23 @@ dword buf_a, buf_b, buf_canvas;
 // ---- parallel-array registry (modular: RegisterTest appends) ----
 dword t_name [MAX_TESTS];   // -> name string
 dword t_unit [MAX_TESTS];   // -> unit string, e.g. "MB/s"
+dword t_rname[MAX_TESTS];   // -> name of the REF_ define (calibration block)
 dword t_fn   [MAX_TESTS];   // -> test function (returns metric x100)
 dword t_ref  [MAX_TESTS];   // reference metric x100 that scores 1000
 dword t_raw  [MAX_TESTS];   // last measured metric x100
 dword t_score[MAX_TESTS];   // last computed score
 byte  t_sect [MAX_TESTS];
-byte  t_done [MAX_TESTS];
+byte  t_done [MAX_TESTS];   // 0 = not run, 1 = has a result, 2 = skipped
 int   t_count = 0;
 
 dword sect_score[SECT_NUM]; // aggregate score per section
 
-void RegisterTest(dword sect, name, unit, ref, fn)
+void RegisterTest(dword sect, name, unit, rname, ref, fn)
 {
 	t_sect [t_count] = sect;
 	t_name [t_count] = name;
 	t_unit [t_count] = unit;
+	t_rname[t_count] = rname;
 	t_ref  [t_count] = ref;
 	t_fn   [t_count] = fn;
 	t_raw  [t_count] = 0;
@@ -51,17 +56,10 @@ void RegisterTest(dword sect, name, unit, ref, fn)
 	t_count++;
 }
 
-int SectionCount(dword sect)
-{
-	int i, c = 0;
-	for (i=0; i<t_count; i++) if (t_sect[i]==sect) c++;
-	return c;
-}
-
-byte SectionRan(dword sect)      // true if any test in this section completed
+byte SectionRan(dword sect)      // true if any test here produced a result
 {
 	int i;
-	for (i=0; i<t_count; i++) if (t_sect[i]==sect) && (t_done[i]) return 1;
+	for (i=0; i<t_count; i++) if (t_sect[i]==sect) && (t_done[i]==1) return 1;
 	return 0;
 }
 
@@ -139,18 +137,25 @@ dword CallFn(dword fn)
 void RunOne(int i)
 {
 	dword raw = CallFn(t_fn[i]);
+	if (raw == BB_SKIP) {
+		t_raw[i]   = 0;
+		t_score[i] = 0;
+		t_done[i]  = 2;
+		return;
+	}
 	t_raw[i]   = raw;
 	t_score[i] = muldiv(raw, 1000, t_ref[i]);
 	t_done[i]  = 1;
 }
 
 // ---- allocate shared buffers + seed with data ----
-void BenchAllocBuffers()
+byte BenchAllocBuffers()        // 0 = out of memory
 {
 	dword i, n;
 	buf_a      = malloc(CPY_BYTES);
 	buf_b      = malloc(CPY_BYTES);
 	buf_canvas = malloc(GCV_W*GCV_H*3);
+	if (!buf_a) || (!buf_b) || (!buf_canvas) return 0;
 	i = 0;
 	while (i < CPY_BYTES) {
 		ESDWORD[buf_a+i] = i;
@@ -160,6 +165,7 @@ void BenchAllocBuffers()
 	for (i=0; i<n; i++) DSBYTE[buf_canvas+i] = i;   // gradient BBGGRR
 	pw2tab[0] = 1;
 	for (i=1; i<32; i++) { n = pw2tab[i-1];  pw2tab[i] = n + n; }
+	return 1;
 }
 
 //======================= system info =======================//

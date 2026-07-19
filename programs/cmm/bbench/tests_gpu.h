@@ -163,20 +163,24 @@ dword t_gpu_vramwrite()
 	sx = p.left;  sx = sx + 5;        sx = sx + GCV_X;
 	sy = p.top;   sy = sy + skin_h;   sy = sy + GCV_Y;
 	// clamp to the screen - writing past the LFB would #GP (small screens!)
-	if (sx >= screen.w) return 0;
-	if (sy >= screen.h) return 0;
+	if (sx >= screen.w) return BB_SKIP;
+	if (sy >= screen.h) return BB_SKIP;
 	cols = GCV_W;  t = sx + cols;  if (t > screen.w) cols = screen.w - sx;
 	rows = GCV_H;  t = sy + rows;  if (t > screen.h) rows = screen.h - sy;
 	rowbytes = cols * bpp_b;
 	if (pitch < rowbytes) pitch = rowbytes;
-	rowdw  = rowbytes / 4;
-	rowadv = pitch - rowbytes;
+	// stosd moves whole dwords: trim the row to a multiple of 4 so rowadv and
+	// the reported byte count match what was actually written (at 24/16 bpp
+	// rowbytes is not divisible by 4 and every row would drift by 1-2 bytes)
+	rowdw    = rowbytes / 4;
+	rowbytes = rowdw * 4;
+	rowadv   = pitch - rowbytes;
 	t   = sx * bpp_b;
 	off = sy * pitch;  off = off + t;
 	// last byte we will touch must be inside the GS segment (no-LFB safety)
 	t = rows - 1;  t = t * pitch;  t = t + off;  t = t + rowbytes;  t = t - 1;
 	lim = gs_limit();
-	if (t > lim) return 0;
+	if (t > lim) return BB_SKIP;
 	BenchBegin();
 	do {
 		vram_fill_gs(off, rowdw, rowadv, rows);
@@ -189,12 +193,12 @@ dword t_gpu_vramwrite()
 
 void Register_GPU()
 {
-	RegisterTest(SECT_GPU, "Fill Rate",      "MPix/s",  REF_FILL,   #t_gpu_fill);
-	RegisterTest(SECT_GPU, "Blit (f7)",      "MPix/s",  REF_BLIT,   #t_gpu_blit);
-	RegisterTest(SECT_GPU, "VRAM Read (f36)","MPix/s",  REF_READ,   #t_gpu_read);
-	RegisterTest(SECT_GPU, "VRAM Write (gs)","MB/s",    REF_VWRITE, #t_gpu_vramwrite);
-	RegisterTest(SECT_GPU, "Lines (f38)",    "Kline/s", REF_LINE,   #t_gpu_lines);
-	RegisterTest(SECT_GPU, "Text (f4)",      "Kchar/s", REF_TEXT,   #t_gpu_text);
+	RegisterTest(SECT_GPU, "Fill Rate",      "MPix/s",  "REF_FILL", REF_FILL,   #t_gpu_fill);
+	RegisterTest(SECT_GPU, "Blit (f7)",      "MPix/s",  "REF_BLIT", REF_BLIT,   #t_gpu_blit);
+	RegisterTest(SECT_GPU, "VRAM Read (f36)","MPix/s",  "REF_READ", REF_READ,   #t_gpu_read);
+	RegisterTest(SECT_GPU, "VRAM Write (gs)","MB/s",    "REF_VWRITE", REF_VWRITE, #t_gpu_vramwrite);
+	RegisterTest(SECT_GPU, "Lines (f38)",    "Kline/s", "REF_LINE", REF_LINE,   #t_gpu_lines);
+	RegisterTest(SECT_GPU, "Text (f4)",      "Kchar/s", "REF_TEXT", REF_TEXT,   #t_gpu_text);
 }
 
 #endif

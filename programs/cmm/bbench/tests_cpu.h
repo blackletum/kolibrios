@@ -177,12 +177,12 @@ dword t_cpu_hash()
 
 void Register_CPU()
 {
-	RegisterTest(SECT_CPU, "Integer",        "MOps/s",  REF_INT,   #t_cpu_int);
-	RegisterTest(SECT_CPU, "Floating Point", "MFLOP/s", REF_FLOAT, #t_cpu_float);
-	RegisterTest(SECT_CPU, "Memory Copy",    "MB/s",    REF_MEM,   #t_cpu_mem);
-	RegisterTest(SECT_CPU, "Memory Latency", "Macc/s",  REF_LAT,   #t_cpu_latency);
-	RegisterTest(SECT_CPU, "Prime Sieve",    "Mcell/s", REF_SIEVE, #t_cpu_sieve);
-	RegisterTest(SECT_CPU, "Hash FNV-1a",    "MB/s",    REF_HASH,  #t_cpu_hash);
+	RegisterTest(SECT_CPU, "Integer",        "MOps/s",  "REF_INT", REF_INT,   #t_cpu_int);
+	RegisterTest(SECT_CPU, "Floating Point", "MFLOP/s", "REF_FLOAT", REF_FLOAT, #t_cpu_float);
+	RegisterTest(SECT_CPU, "Memory Copy",    "MB/s",    "REF_MEM", REF_MEM,   #t_cpu_mem);
+	RegisterTest(SECT_CPU, "Memory Latency", "Macc/s",  "REF_LAT", REF_LAT,   #t_cpu_latency);
+	RegisterTest(SECT_CPU, "Prime Sieve",    "Mcell/s", "REF_SIEVE", REF_SIEVE, #t_cpu_sieve);
+	RegisterTest(SECT_CPU, "Hash FNV-1a",    "MB/s",    "REF_HASH", REF_HASH,  #t_cpu_hash);
 }
 
 #endif

@@ -60,6 +60,7 @@ dword sums[SECT_NUM];
 dword cnts[SECT_NUM];
 
 char sysinfo[] = "CPU: %d MHz   RAM: %d MB   Screen: %dx%d@%db";
+char revinfo[] = "   rev %d";
 
 //---------------- disk list (LMENU dropdown) ----------------//
 char  disk_store[MAX_DISKS*24];
@@ -171,6 +172,15 @@ void SetAll(byte v)
 #define ICON_GPU    52
 #define ICON_DISK   50
 
+#define EBUF_SIZE 16384      // report buffer; a full 48-test run needs ~6 KB
+#define BAR_W     26         // bar width in characters, same for every row
+
+// one copy of each colour; html_head repeats them for browsers that honour
+// <style> - WebView reads bg= straight off the tag
+char c_bar1[] = "#2c7be5";  char c_trk1[] = "#cdd2da";
+char c_bar2[] = "#4a90e2";  char c_trk2[] = "#e4e7ec";
+char c_cmp [] = "#8fb8e8";
+
 dword ebuf = 0;
 dword epos = 0;
 char  etmp[176];
@@ -205,29 +215,31 @@ void BuildExportPath()                   // unique name from date + time
 
 void Hput(dword s)
 {
+	dword l = strlen(s);
+	if (epos + l >= EBUF_SIZE) return;   // truncate the report, never the heap
 	strcpy(ebuf+epos, s);
-	epos = epos + strlen(s);
+	epos = epos + l;
 }
 
 void Hfield(dword s, dword width)
 {
-	dword l;
+	dword l = strlen(s);
 	Hput(s);
-	l = strlen(s);
 	while (l < width) { Hput(" ");  l++; }
 }
 
-void Hbar(dword score, fillcol, trackcol)
+// one bar for test rows (max = BAR_FULL) and compare rows (max = fastest CPU)
+void Hbar(dword val, max, fillcol, trackcol)
 {
 	dword filled, track, i;
-	filled = score;  if (filled > BAR_FULL) filled = BAR_FULL;
-	filled = muldiv(filled, 26, BAR_FULL);
-	track = 26 - filled;
+	if (max < 1) max = 1;
+	filled = muldiv(val, BAR_W, max);  if (filled > BAR_W) filled = BAR_W;
+	track = BAR_W - filled;
 	Hput("<font bg=");  Hput(fillcol);  Hput(">");
 	for (i=0; i<filled; i++) Hput(" ");
 	Hput("</font><font bg=");  Hput(trackcol);  Hput(">");
 	for (i=0; i<track; i++) Hput(" ");
-	Hput("</font>");
+	Hput("</font>\n");
 }
 
 void ExportSection(dword sect, title, icon)
@@ -242,39 +254,61 @@ void ExportSection(dword sect, title, icon)
 	Hput(#etmp);
 	r = 0;
 	for (i=0; i<t_count; i++) {
-		if (t_sect[i]==sect) && (t_done[i]) {
-			whole = t_raw[i] / 100;  frac = t_raw[i] % 100;
-			if (r & 1) { barcol = "#4a90e2";  trkcol = "#e4e7ec"; }
-			else       { barcol = "#2c7be5";  trkcol = "#cdd2da"; }
-			Hfield(t_name[i], 17);
-			sprintf(#etmp, "%d", t_score[i]);  Hfield(#etmp, 8);
-			if (frac < 10) sprintf(#etmp, "%d.0%d %s", whole, frac, t_unit[i]);
-			else           sprintf(#etmp, "%d.%d %s",  whole, frac, t_unit[i]);
-			Hfield(#etmp, 16);
-			Hbar(t_score[i], barcol, trkcol);
-			Hput("\n");
-			r++;
+		if (t_sect[i]==sect) {
+			if (t_done[i]==2) {                    // not applicable here
+				Hfield(t_name[i], 17);
+				Hfield("skipped", 8);
+				Hput("\n");
+			}
+			if (t_done[i]==1) {
+				whole = t_raw[i] / 100;  frac = t_raw[i] % 100;
+				if (r & 1) { barcol = #c_bar2;  trkcol = #c_trk2; }
+				else       { barcol = #c_bar1;  trkcol = #c_trk1; }
+				Hfield(t_name[i], 17);
+				sprintf(#etmp, "%d", t_score[i]);  Hfield(#etmp, 8);
+				if (frac < 10) sprintf(#etmp, "%d.0%d %s", whole, frac, t_unit[i]);
+				else           sprintf(#etmp, "%d.%d %s",  whole, frac, t_unit[i]);
+				Hfield(#etmp, 16);
+				Hbar(t_score[i], BAR_FULL, barcol, trkcol);
+				r++;
+			}
 		}
 	}
 	Hput("</blockquote>\n");
 }
 
 // name(22) + score(8) + mhz(11) = 41 chars before the bar - exactly like the
-// test rows (17+8+16), so all bars on the page line up; bar width 26 too.
+// test rows (17+8+16), so all bars on the page line up.
 void CompareRow(dword name, mhz, score, maxscore, fillcol, trkcol)
 {
-	dword filled, track, i;
 	char sb[20];
 	Hfield(name, 22);
-	sprintf(#sb, "%d", score);  Hfield(#sb, 8);
+	sprintf(#sb, "%d", score);    Hfield(#sb, 8);
 	sprintf(#sb, "%d MHz", mhz);  Hfield(#sb, 11);
-	filled = muldiv(score, 26, maxscore);  if (filled > 26) filled = 26;
-	track = 26 - filled;
-	Hput("<font bg=");  Hput(fillcol);  Hput(">");
-	for (i=0; i<filled; i++) Hput(" ");
-	Hput("</font><font bg=");  Hput(trkcol);  Hput(">");
-	for (i=0; i<track; i++) Hput(" ");
-	Hput("</font>\n");
+	Hbar(score, maxscore, fillcol, trkcol);
+}
+
+// Ready-to-paste block: without it calibration means transcribing every
+// number by hand, so nobody does it and the REF_ values stay guesses.
+void ExportCalib()
+{
+	int i;
+	Hput("<h3><b>Calibration</b></h3><blockquote>\n");
+	Hput("Paste into the test modules to score this machine 1000 everywhere,\n");
+	Hput("then bump BB_REVISION and re-measure every cpudb entry.\n\n");
+	for (i=0; i<t_count; i++) {
+		if (t_done[i]==1) {
+			Hput("#define ");  Hfield(t_rname[i], 12);
+			sprintf(#etmp, "%d", t_raw[i]);  Hfield(#etmp, 9);
+			Hput("// ");  Hput(t_name[i]);  Hput("\n");
+		}
+	}
+	if (SectionRan(SECT_CPU)) {
+		sprintf(#etmp, "\ncpudb_add(\"CPU name here\", %d, %d, %d);\n",
+			sys_cpu_mhz, sect_score[SECT_CPU], BB_REVISION);
+		Hput(#etmp);
+	}
+	Hput("</blockquote>\n");
 }
 
 void ExportCompare()
@@ -286,9 +320,9 @@ void ExportCompare()
 	mx = thisc;
 	for (i=0; i<cpudb_count; i++) if (cpudb_score[i] > mx) mx = cpudb_score[i];
 	if (mx < 1) mx = 1;
-	CompareRow("This PC", sys_cpu_mhz, thisc, mx, "#2c7be5", "#cdd2da");
+	CompareRow("This PC", sys_cpu_mhz, thisc, mx, #c_bar1, #c_trk1);
 	for (i=0; i<cpudb_count; i++) {
-		if (i < 8) CompareRow(cpudb_name[i], cpudb_mhz[i], cpudb_score[i], mx, "#8fb8e8", "#e4e7ec");
+		if (i < 8) CompareRow(cpudb_name[i], cpudb_mhz[i], cpudb_score[i], mx, #c_cmp, #c_trk2);
 	}
 	Hput("</blockquote>\n");
 }
@@ -304,7 +338,8 @@ font[bg='#e4e7ec']{background:#e4e7ec}
 void ExportHTML()
 {
 	dword sp, fname;
-	if (!ebuf) ebuf = malloc(16384);
+	if (!ebuf) ebuf = malloc(EBUF_SIZE);
+	if (!ebuf) return;
 	BuildExportPath();                       // need the name for <title>
 	sp = strrchr(#epath, '/');
 	fname = #epath + sp;                     // -> "bb_YYMMDD_HHMMSS.htm"
@@ -315,11 +350,14 @@ void ExportHTML()
 	Hput("<font color=#86868b>");
 	sprintf(#etmp, #sysinfo, sys_cpu_mhz, sys_ram_mb, screen.w, screen.h, sys_bpp);
 	Hput(#etmp);
+	sprintf(#etmp, #revinfo, BB_REVISION);
+	Hput(#etmp);
 	Hput("</font>\n\n");
 	ExportSection(SECT_CPU,  "CPU",      ICON_CPU);    // each self-guards on t_done
 	ExportSection(SECT_GPU,  "Graphics", ICON_GPU);
 	ExportSection(SECT_DISK, "Disk",     ICON_DISK);
 	if (SectionRan(SECT_CPU)) ExportCompare();
+	ExportCalib();
 	Hput("</pre></body></html>");
 	FileWrite(#epath, ebuf, epos);
 	RunProgram("/sys/network/webview", #epath);
@@ -481,10 +519,12 @@ void RunSelected()
 			idx++;
 			DrawRunStatus(t_name[i], idx, total, t_sect[i]);
 			RunOne(i);
-			s = t_sect[i];
-			v = t_score[i];  if (v < 1) v = 1;
-			sums[s] = sums[s] + ilog2_16(v);     // geometric mean accumulator
-			cnts[s] = cnts[s] + 1;
+			if (t_done[i]==1) {                  // skipped carry no score
+				s = t_sect[i];
+				v = t_score[i];  if (v < 1) v = 1;
+				sums[s] = sums[s] + ilog2_16(v); // geometric mean accumulator
+				cnts[s] = cnts[s] + 1;
+			}
 		}
 	}
 	Disk_Cleanup();                              // remove the 8 MB temp file
@@ -525,7 +565,10 @@ void main()
 	int i;
 	dword click;
 	GetSysInfo();
-	BenchAllocBuffers();
+	if (!BenchAllocBuffers()) {
+		notify("'BirdBench\nNot enough memory for the work buffers!' -E");
+		ExitProcess();
+	}
 	cpudb_init();
 	Register_CPU();
 	Register_GPU();
