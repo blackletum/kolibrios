@@ -193,12 +193,12 @@ dword t_gpu_vramwrite()
 
 void Register_GPU()
 {
-	RegisterTest(SECT_GPU, "Fill Rate",      "MPix/s",  "REF_FILL", REF_FILL,   #t_gpu_fill);
-	RegisterTest(SECT_GPU, "Blit (f7)",      "MPix/s",  "REF_BLIT", REF_BLIT,   #t_gpu_blit);
-	RegisterTest(SECT_GPU, "VRAM Read (f36)","MPix/s",  "REF_READ", REF_READ,   #t_gpu_read);
-	RegisterTest(SECT_GPU, "VRAM Write (gs)","MB/s",    "REF_VWRITE", REF_VWRITE, #t_gpu_vramwrite);
-	RegisterTest(SECT_GPU, "Lines (f38)",    "Kline/s", "REF_LINE", REF_LINE,   #t_gpu_lines);
-	RegisterTest(SECT_GPU, "Text (f4)",      "Kchar/s", "REF_TEXT", REF_TEXT,   #t_gpu_text);
+	RegisterTest(SECT_GPU, "Fill Rate",      "MPix/s",  REF_FILL,   #t_gpu_fill);
+	RegisterTest(SECT_GPU, "Blit (f7)",      "MPix/s",  REF_BLIT,   #t_gpu_blit);
+	RegisterTest(SECT_GPU, "VRAM Read (f36)","MPix/s",  REF_READ,   #t_gpu_read);
+	RegisterTest(SECT_GPU, "VRAM Write (gs)","MB/s",    REF_VWRITE, #t_gpu_vramwrite);
+	RegisterTest(SECT_GPU, "Lines (f38)",    "Kline/s", REF_LINE,   #t_gpu_lines);
+	RegisterTest(SECT_GPU, "Text (f4)",      "Kchar/s", REF_TEXT,   #t_gpu_text);
 }
 
 #endif

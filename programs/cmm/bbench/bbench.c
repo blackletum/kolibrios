@@ -60,7 +60,7 @@ dword sums[SECT_NUM];
 dword cnts[SECT_NUM];
 
 char sysinfo[] = "CPU: %d MHz   RAM: %d MB   Screen: %dx%d@%db";
-char revinfo[] = "   rev %d";
+char revinfo[] = "   BB Revision: %d";
 
 //---------------- disk list (LMENU dropdown) ----------------//
 char  disk_store[MAX_DISKS*24];
@@ -288,19 +288,20 @@ void CompareRow(dword name, mhz, score, maxscore, fillcol, trkcol)
 	Hbar(score, maxscore, fillcol, trkcol);
 }
 
+#ifdef BB_CALIB
 // Ready-to-paste block: without it calibration means transcribing every
 // number by hand, so nobody does it and the REF_ values stay guesses.
 void ExportCalib()
 {
 	int i;
 	Hput("<h3><b>Calibration</b></h3><blockquote>\n");
-	Hput("Paste into the test modules to score this machine 1000 everywhere,\n");
-	Hput("then bump BB_REVISION and re-measure every cpudb entry.\n\n");
+	Hput("This machine's metrics. Put each one in the matching REF_ define to\n");
+	Hput("score it 1000 everywhere, then bump BB_REVISION and re-measure cpudb.\n\n");
 	for (i=0; i<t_count; i++) {
 		if (t_done[i]==1) {
-			Hput("#define ");  Hfield(t_rname[i], 12);
-			sprintf(#etmp, "%d", t_raw[i]);  Hfield(#etmp, 9);
-			Hput("// ");  Hput(t_name[i]);  Hput("\n");
+			Hfield(t_name[i], 18);
+			sprintf(#etmp, "%d", t_raw[i]);  Hput(#etmp);
+			Hput("\n");
 		}
 	}
 	if (SectionRan(SECT_CPU)) {
@@ -310,6 +311,7 @@ void ExportCalib()
 	}
 	Hput("</blockquote>\n");
 }
+#endif
 
 void ExportCompare()
 {
@@ -357,7 +359,9 @@ void ExportHTML()
 	ExportSection(SECT_GPU,  "Graphics", ICON_GPU);
 	ExportSection(SECT_DISK, "Disk",     ICON_DISK);
 	if (SectionRan(SECT_CPU)) ExportCompare();
+#ifdef BB_CALIB
 	ExportCalib();
+#endif
 	Hput("</pre></body></html>");
 	FileWrite(#epath, ebuf, epos);
 	RunProgram("/sys/network/webview", #epath);

@@ -301,11 +301,11 @@ dword t_disk_fs()
 
 void Register_DISK()
 {
-	RegisterTest(SECT_DISK, "Seq Write",   "MB/s", "REF_DWRITE", REF_DWRITE, #t_disk_write);
-	RegisterTest(SECT_DISK, "Seq Read",    "MB/s", "REF_DREAD", REF_DREAD,  #t_disk_read);
-	RegisterTest(SECT_DISK, "Rand Write",  "MB/s", "REF_RWRITE", REF_RWRITE, #t_disk_rwrite);
-	RegisterTest(SECT_DISK, "Rand Read",   "MB/s", "REF_RREAD", REF_RREAD,  #t_disk_rread);
-	RegisterTest(SECT_DISK, "File System", "op/s", "REF_FS", REF_FS,     #t_disk_fs);
+	RegisterTest(SECT_DISK, "Seq Write",   "MB/s", REF_DWRITE, #t_disk_write);
+	RegisterTest(SECT_DISK, "Seq Read",    "MB/s", REF_DREAD,  #t_disk_read);
+	RegisterTest(SECT_DISK, "Rand Write",  "MB/s", REF_RWRITE, #t_disk_rwrite);
+	RegisterTest(SECT_DISK, "Rand Read",   "MB/s", REF_RREAD,  #t_disk_rread);
+	RegisterTest(SECT_DISK, "File System", "op/s", REF_FS,     #t_disk_fs);
 }
 
 #endif

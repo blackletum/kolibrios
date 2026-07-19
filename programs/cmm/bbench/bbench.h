@@ -13,7 +13,9 @@
 
 #define MAX_TESTS  48
 
-#define BB_REVISION 1          // bump on any change to a test or a REF_ value
+//#define BB_CALIB           // uncomment to add the calibration block to the report
+
+#define BB_REVISION 1          // version of the tests + REF_ values, shown in the report
 #define BB_SKIP     0xFFFFFFFF // test cannot run here: no score, out of the geomean
 
 // ---- shared work buffers ----
@@ -31,7 +33,6 @@ dword buf_a, buf_b, buf_canvas;
 // ---- parallel-array registry (modular: RegisterTest appends) ----
 dword t_name [MAX_TESTS];   // -> name string
 dword t_unit [MAX_TESTS];   // -> unit string, e.g. "MB/s"
-dword t_rname[MAX_TESTS];   // -> name of the REF_ define (calibration block)
 dword t_fn   [MAX_TESTS];   // -> test function (returns metric x100)
 dword t_ref  [MAX_TESTS];   // reference metric x100 that scores 1000
 dword t_raw  [MAX_TESTS];   // last measured metric x100
@@ -42,12 +43,11 @@ int   t_count = 0;
 
 dword sect_score[SECT_NUM]; // aggregate score per section
 
-void RegisterTest(dword sect, name, unit, rname, ref, fn)
+void RegisterTest(dword sect, name, unit, ref, fn)
 {
 	t_sect [t_count] = sect;
 	t_name [t_count] = name;
 	t_unit [t_count] = unit;
-	t_rname[t_count] = rname;
 	t_ref  [t_count] = ref;
 	t_fn   [t_count] = fn;
 	t_raw  [t_count] = 0;
