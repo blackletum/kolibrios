@@ -255,7 +255,7 @@ class AsmReaderRecognizingStrings(LegacyAsmReader):
         if self.should_recognize_strings and (c == '"' or c == "'"):
             # If just now we was at the double or single quotation mark
             # and we aren't in a string yet then say
-            # "we are in a string openned with this quotation mark now"
+            # "we are in a string opened with this quotation mark now"
             if self.in_string is None:
                 self.in_string = c
             # If just now we was at the double or single quotation mark
@@ -400,7 +400,7 @@ class AsmElement:
         contents += doxycomment
         contents += (f"@par Source\n" +
                      f"<a href='{link_root}/{self.file}" +
-                     f"#line-{self.line}'>{self.file}:{self.line}</a>\n")
+                     f"#L{self.line}'>{self.file}:{self.line}</a>\n")
         contents += '*/\n'
         contents += declaration
         contents += '\n\n'
@@ -784,7 +784,7 @@ def parse_after_struct(r, as_union=True):
                 # Skip the ends of the union
                 r.nextline()
             elif r.curr() == ':':
-                warnings += f"{r.location()}: Skept the label in the struct\n"
+                warnings += f"{r.location()}: Label skipped in the struct\n"
             else:
                 raise Exception(f"Garbage in struct member at {location} " +
                                 f" (got '{var}' identifier)")
@@ -939,7 +939,7 @@ def get_declarations(asm_file_contents, asm_file_name):
                 # Match label beginning (':' after name)
                 if r.curr() == ':':
                     # Get to the end of the line and
-                    # get the coment from the reader
+                    # get the comment from the reader
                     while r.curr() != '':
                         r.step()
                     comment = r.comment
@@ -1038,8 +1038,9 @@ def handle_file(handled_files, asm_file_name, subdir="."):
         get_declarations(asm_file_contents, asm_file_name)
 
 if __name__ == "__main__":
-    link_root = "http://websvn.kolibrios.org/filedetails.php"
-    link_root += "?repname=Kolibri+OS&path=/kernel/trunk"
+    # Note: This URL depends on the VCS used (currently Gitea/Git)
+    # Update this if the repository hosting changes
+    link_root = "https://git.kolibrios.org/KolibriOS/kolibrios/src/branch/main/kernel/trunk"
 
     # Dict where an identifier is assicoated with a string
     # The string contains characters specifying flags

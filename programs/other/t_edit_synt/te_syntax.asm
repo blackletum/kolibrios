@@ -1,3 +1,8 @@
+; SPDX-License-Identifier: NOASSERTION
+;
+
+; Text encoded with Code Page 866 - Cyrillic
+
 use32
   org 0
   db 'MENUET01' ;идентиф. исполняемого файла всегда 8 байт
@@ -12,9 +17,9 @@ include '../../proc32.inc'
 include '../../KOSfuncs.inc'
 include '../../load_img.inc'
 include '../../load_lib.mac'
-include '../../develop/libraries/box_lib/trunk/box_lib.mac'
-include '../../system/skincfg/trunk/kglobals.inc'
-include '../../system/skincfg/trunk/unpacker.inc'
+include '../../develop/libraries/box_lib/box_lib.mac'
+include '../../system/skincfg/kglobals.inc'
+include '../../system/skincfg/unpacker.inc'
 include 'te_data.inc'
 include 'te_work.inc' ;text work functions
 
@@ -45,7 +50,7 @@ start:
 	stdcall [tl_data_init], tree1
 
 ; читаем файл с курсорами и линиями
-	include_image_file '..\..\media\log_el\trunk\tl_sys_16.png', icon_tl_sys
+	include_image_file '..\..\media\log_el\tl_sys_16.png', icon_tl_sys
 	mov eax,[icon_tl_sys]
 	mov [tree1.data_img_sys],eax
 ;---------------------------------------------------------------------
@@ -148,7 +153,7 @@ draw_window:
 	int 0x40
 
 	stdcall [PathShow_draw], PathShow_data_1
-	
+
 	stdcall [edit_box_draw], edit1
 	stdcall [tl_draw], tree1
 

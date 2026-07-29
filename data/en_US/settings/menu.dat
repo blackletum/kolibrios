@@ -1,5 +1,5 @@
 #0 **** MAIN
-58 Welcome              |welcome.htm
+58 Welcome              |/sys/welcome.htm
 00 2D Demos           > |@1
 00 3D Demos           > |@2
 00 Graphics           > |@3
@@ -113,15 +113,16 @@
 24 Synergy              |network/synergyc
 24 DNS lookup           |network/nslookup
 61 VNC Viewer           |network/vncc
-33 Downloader           |network/downloader
-12 Text-based browser   |network/webview
+33 HTTPGet              |network/httpget
+33 Downloader           |network/dl
+12 WebView Browser      |network/webview
 #13 **** SERVERS
 24 FTP                  |network/ftpd
 #14 **** OTHER
 00 Emulators*         > |@6
 16 Analog clock         |aclock
 16 Binary clock         |demos/bcdclk
-29 FB2 Reader           |fb2read
+18 FB2 Reader           |fb2read
 53 Timer                |timer
 45 Screenshooter        |scrshoot
 45 Easyshot             |easyshot

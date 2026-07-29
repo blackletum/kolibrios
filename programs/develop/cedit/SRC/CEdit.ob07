@@ -28,7 +28,9 @@ IMPORT
     RW, Ini, EB := EditBox, Tabs, Toolbar, SB := StatusBar;
 
 CONST
-    HEADER = "CEdit (30-apr-2025)";
+    APPNAME = "CEdit";
+    VERSION = "1.0";
+    HEADER = APPNAME + " " + VERSION;
 
     ShellFilter = "";
     EditFilter = "sh|inc|txt|asm|ob07|c|cpp|h|pas|pp|lua|ini|json";
@@ -1575,7 +1577,7 @@ VAR
 BEGIN
     menu := List.create(NIL);
     Menu.AddMenuItem(menu, menuIncInd, "increase    Tab");
-    Menu.AddMenuItem(menu, menuDecInd, "decrease    shift-Bksp");
+    Menu.AddMenuItem(menu, menuDecInd, "decrease    shift-Tab");
     RETURN Menu.create(menu, mainTID)
 END CreateMenuIndent;
 
@@ -1686,6 +1688,8 @@ BEGIN
     ELSE
     	IF keyCode = -1 THEN
     		key := -1
+        ELSIF (keyCode = 15) & shift THEN (* Shift-Tab *)
+            T.Indent(text, FALSE)
         ELSIF keyCode = 61 THEN (* F3 *)
             key := -1;
             IF search & (searchText # "") THEN
@@ -1750,7 +1754,15 @@ BEGIN
         ELSE
             IF EditBox_Focus(FindEdit) THEN
             	IF keyCode = 15 THEN (* Tab *)
-            		SetFocus(ReplaceEdit, TRUE)
+                    IF shift THEN
+            		    SetFocus(GotoEdit, TRUE)
+                    ELSE
+                        SetFocus(ReplaceEdit, TRUE)
+                    END
+                ELSIF keyCode = 28 THEN (* Enter *)
+                    IF searchOpened & (searchText # "") THEN
+                        notFound := ~T.findNext(text, BKW.value)
+                    END
             	ELSE
 	                EB.key(FindEdit, key);
 	                EditBox_Get(FindEdit, new_searchText);
@@ -1761,14 +1773,26 @@ BEGIN
                 END
             ELSIF EditBox_Focus(ReplaceEdit) THEN
             	IF keyCode = 15 THEN (* Tab *)
-            		SetFocus(GotoEdit, TRUE)
+                    IF shift THEN
+                        SetFocus(FindEdit, TRUE)
+                    ELSE
+                        SetFocus(GotoEdit, TRUE)
+                    END
+                ELSIF keyCode = 28 THEN (* Enter *)
+                    IF searchOpened & (searchText # "") THEN
+                        notFound := ~T.findNext(text, BKW.value)
+                    END
             	ELSE
                 	EB.key(ReplaceEdit, key);
                 	EditBox_Get(ReplaceEdit, replaceText)
                 END
             ELSIF EditBox_Focus(GotoEdit) THEN
             	IF keyCode = 15 THEN (* Tab *)
-            		SetFocus(FindEdit, TRUE)
+                    IF shift THEN
+                        SetFocus(ReplaceEdit, TRUE)
+                    ELSE
+                        SetFocus(FindEdit, TRUE)
+                    END
             	ELSE
 	                IF (key DIV 256) MOD 256 = 13 THEN
 	                    goto

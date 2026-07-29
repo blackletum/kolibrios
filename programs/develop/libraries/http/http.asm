@@ -100,6 +100,10 @@ lib_init: ;//////////////////////////////////////////////////////////////////;;
         mov     [mem.alloc], eax
         mov     [mem.free], ebx
         mov     [mem.realloc], ecx
+
+        cmp     [dll.load], edx
+        je      .ok
+
         mov     [dll.load], edx
 
         invoke  dll.load, @IMPORT
@@ -115,6 +119,7 @@ lib_init: ;//////////////////////////////////////////////////////////////////;;
         invoke  ini.get_str, inifile, sec_proxy, key_password, proxyPassword, 256, proxyPassword
         popa
 
+  .ok:
         DEBUGF  1, "HTTP library: init OK\n"
         xor     eax, eax
         ret
@@ -916,6 +921,7 @@ proc HTTP_receive identifier ;//////////////////////////////////////////////////
 ; Set chunk pointer where first chunk should begin.
         mov     eax, [ebp + http_msg.content_ptr]
         mov     [ebp + http_msg.chunk_ptr], eax
+        xor     eax, eax
 
 ;--------------------------------------------------------------
 ;
@@ -985,8 +991,11 @@ proc HTTP_receive identifier ;//////////////////////////////////////////////////
         mov     ecx, [ebp + http_msg.write_ptr]
         sub     ecx, [ebp + http_msg.chunk_ptr]
         sub     ecx, edx                                ; ecx is now number of received data bytes (without chunkline)
-; Update content_received counter
+; Update content_received counter.
+        test    [ebp + http_msg.flags], FLAG_STREAM or FLAG_RING
+        jz      .chunkline_counted
         add     [ebp + http_msg.content_received], ecx
+  .chunkline_counted:
 ; Calculate new write ptr
         sub     [ebp + http_msg.write_ptr], edx
         test    [ebp + http_msg.flags], FLAG_STREAM
@@ -1096,7 +1105,19 @@ proc HTTP_receive identifier ;//////////////////////////////////////////////////
         sub     [ebp + http_msg.write_ptr], ebx
   @@:
         ; We only got a partial chunk, or need more chunks, update content_received and request more data
+        test    [ebp + http_msg.flags], FLAG_STREAM or FLAG_RING
+        jz      .nmdc_exact
         add     [ebp + http_msg.content_received], eax
+        jmp     .nmdc_ret
+  .nmdc_exact:
+        mov     eax, [ebp + http_msg.chunk_ptr]
+        cmp     eax, [ebp + http_msg.write_ptr]
+        jbe     @f
+        mov     eax, [ebp + http_msg.write_ptr]
+  @@:
+        sub     eax, [ebp + http_msg.content_ptr]
+        mov     [ebp + http_msg.content_received], eax
+  .nmdc_ret:
         popa
         xor     eax, eax
         dec     eax

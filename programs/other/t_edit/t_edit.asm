@@ -1,3 +1,9 @@
+; SPDX-License-Identifier: NOASSERTION
+;
+
+; Text encoded with Code Page 866 - Cyrillic
+
+
 ;Огромная благодарность всем, кто помогал: кодом/советом/дизайном ...
 
 use32
@@ -16,9 +22,9 @@ include '../../macros.inc'
 include '../../KOSfuncs.inc'
 include '../../load_img.inc'
 include '../../load_lib.mac'
-include '../../develop/libraries/box_lib/trunk/box_lib.mac'
-include '../../system/skincfg/trunk/kglobals.inc'
-include '../../system/skincfg/trunk/unpacker.inc'
+include '../../develop/libraries/box_lib/box_lib.mac'
+include '../../system/skincfg/kglobals.inc'
+include '../../system/skincfg/unpacker.inc'
 include 'lang.inc'
 
 include 't_data.inc'
@@ -87,7 +93,7 @@ mov	ebp,lib0
 	stdcall img_to_gray, [bmp_icon],eax,(TOOLBAR_ICONS_SIZE)/3
 ;---------------------------------------------------------------------
 ; внедряем файл с курсорами и линиями
-	include_image_file '..\..\media\log_el\trunk\tl_sys_16.png', icon_tl_sys
+	include_image_file '..\..\media\log_el\tl_sys_16.png', icon_tl_sys
 	mov eax,dword[icon_tl_sys]
 	mov dword[tree1.data_img_sys],eax
 ; внедряем файл с иконками узлов
@@ -111,7 +117,7 @@ mov	ebp,lib0
 			cmp byte[eax],'.' ;фильтруем файлы с именами '.' и '..'
 			je .filter
 			;0x10000 ;1*2^16 - где 1 номер иконки с книгой
-			stdcall [tl_node_add], tree1,0x10000,eax 
+			stdcall [tl_node_add], tree1,0x10000,eax
 			stdcall [tl_cur_next], tree1
 			.filter:
 			add eax,304

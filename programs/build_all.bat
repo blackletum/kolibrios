@@ -56,52 +56,52 @@ for %%i in (%BIN% %BIN%\demos %BIN%\develop %BIN%\lib %BIN%\games %BIN%\network 
 echo *
 echo Building system
 echo *
-fasm system\calendar\trunk\calendar.asm %BIN%\calendar
-fasm system\board\trunk\board.asm %BIN%\develop\board
-fasm system\commouse\trunk\commouse.asm %BIN%\commouse
-fasm system\cpu\trunk\cpu.asm %BIN%\cpu
-fasm system\cpuid\trunk\cpuid.asm %BIN%\cpuid
-fasm system\skincfg\trunk\skincfg.asm %BIN%\skincfg
-fasm system\docpack\trunk\docpack.asm %BIN%\docpack
-fasm system\end\trunk\end.asm %BIN%\end
+fasm system\calendar\calendar.asm %BIN%\calendar
+fasm system\board\board.asm %BIN%\develop\board
+rem fasm system\commouse\trunk\commouse.asm %BIN%\commouse
+fasm system\cpu\cpu.asm %BIN%\cpu
+fasm testing\cpuid\cpuid.asm %BIN%\cpuid
+fasm system\skincfg\skincfg.asm %BIN%\skincfg
+fasm system\docpack\docpack.asm %BIN%\docpack
+fasm system\end\end.asm %BIN%\end
 fasm system\gmon\gmon.asm %BIN%\gmon
-fasm system\icon\trunk\icon.asm %BIN%\icon
-fasm system\kbd\trunk\kbd.ASM %BIN%\kbd
-fasm system\launcher\trunk\launcher.asm %BIN%\launcher
-fasm system\menu\trunk\menu.asm %BIN%\@menu
-fasm system\mgb\trunk\mgb.asm %BIN%\mgb
-fasm system\mousemul\trunk\mousemul.asm %BIN%\mousemul
-fasm system\PANEL\trunk\@TASKBAR.ASM %BIN%\@TASKBAR
-fasm system\pcidev\trunk\pcidev.asm %BIN%\pcidev
-fasm system\RB\trunk\@RB.ASM %BIN%\@RB
-fasm system\rdsave\trunk\rdsave.asm %BIN%\rdsave
-fasm system\run\trunk\run.asm %BIN%\run
-fasm system\setup\trunk\setup.asm %BIN%\setup
-fasm system\skinsel\skinsel.asm %BIN%\skinsel
-fasm system\ss\trunk\@ss.asm %BIN%\@ss
-fasm system\vrr\trunk\vrr.asm %BIN%\vrr
-fasm system\vrr_m\trunk\vrr_m.asm %BIN%\vrr_m
-fasm system\zkey\trunk\zkey.asm %BIN%\zkey
+fasm system\icon\icon.asm %BIN%\icon
+fasm testing\kbd\kbd.ASM %BIN%\kbd
+fasm system\launcher\launcher.asm %BIN%\launcher
+fasm system\menu\menu.asm %BIN%\@menu
+fasm testing\mgb\mgb.asm %BIN%\mgb
+fasm system\mousemul\mousemul.asm %BIN%\mousemul
+fasm system\taskbar\TASKBAR.ASM %BIN%\@TASKBAR
+fasm testing\pcidev\pcidev.asm %BIN%\pcidev
+rem fasm system\RB\trunk\@RB.ASM %BIN%\@RB
+fasm system\rdsave\rdsave.asm %BIN%\rdsave
+fasm system\run\run.asm %BIN%\run
+fasm system\setup\setup.asm %BIN%\setup
+rem fasm system\skinsel\skinsel.asm %BIN%\skinsel
+rem fasm system\ss\trunk\@ss.asm %BIN%\@ss
+rem fasm system\vrr\trunk\vrr.asm %BIN%\vrr
+rem fasm system\vrr_m\trunk\vrr_m.asm %BIN%\vrr_m
+fasm system\zkey\zkey.asm %BIN%\zkey
 
 echo *
 echo Building develop
 echo *
-fasm develop\cmd\trunk\cmd.asm %BIN%\cmd
-fasm develop\fasm\trunk\fasm.asm %BIN%\develop\fasm
-fasm develop\h2d2b\trunk\h2d2b.asm %BIN%\develop\h2d2b
-fasm develop\heed\trunk\heed.asm %BIN%\demos\heed
+rem fasm develop\cmd\trunk\cmd.asm %BIN%\cmd
+fasm develop\fasm\1.73\fasm.asm %BIN%\develop\fasm
+fasm develop\h2d2b\h2d2b.asm %BIN%\develop\h2d2b
+fasm develop\heed\heed.asm %BIN%\demos\heed
 rem fasm develop\hexview\trunk\hexview.asm hexview
-fasm develop\keyascii\trunk\keyascii.asm %BIN%\develop\keyascii
+fasm develop\keyascii\keyascii.asm %BIN%\develop\keyascii
 fasm develop\mtdbg\mtdbg.asm %BIN%\develop\mtdbg
 rem fasm develop\param\trunk\param.asm param
-fasm develop\scancode\trunk\scancode.asm %BIN%\develop\scancode
-fasm develop\tinypad\trunk\tinypad.asm %BIN%\tinypad
-fasm develop\cObj\trunk\cObj.asm %BIN%\develop\cObj
+fasm develop\scancode\scancode.asm %BIN%\develop\scancode
+fasm develop\tinypad\tinypad.asm %BIN%\tinypad
+fasm develop\cObj\cObj.asm %BIN%\develop\cObj
 
 echo *
 echo Building systems libraries
 echo *
-fasm develop\libraries\box_lib\trunk\box_lib.asm %BIN%\lib\box_lib.obj
+fasm develop\libraries\box_lib\box_lib.asm %BIN%\lib\box_lib.obj
 fasm develop\libraries\console\console.asm %BIN%\lib\console.obj
 fasm develop\libraries\libs-dev\libgfx\libgfx.asm %BIN%\lib\libgfx.obj
 fasm develop\libraries\libs-dev\libimg\libimg.asm %BIN%\lib\libimg.obj
@@ -111,11 +111,11 @@ fasm develop\libraries\libs-dev\libio\libio.asm %BIN%\lib\libio.obj
 echo *
 echo Building fs
 echo *
-fasm fs\copy2\trunk\copy2.asm %BIN%\copy2
-fasm fs\copyr\trunk\copyr.asm %BIN%\copyr
-fasm fs\kfar\trunk\kfar.asm %BIN%\kfar
+rem fasm fs\copy2\trunk\copy2.asm %BIN%\copy2
+fasm fs\copyr\copyr.asm %BIN%\copyr
+fasm fs\kfar\kfar.asm %BIN%\kfar
 rem fasm fs\mfar\trunk\mfar.asm %BIN%\mfar
-fasm fs\sysxtree\trunk\sysxtree.asm %BIN%\sysxtree
+rem fasm fs\sysxtree\trunk\sysxtree.asm %BIN%\sysxtree
 
 echo *
 echo Building network
@@ -155,7 +155,7 @@ echo Building other
 echo *
 rem fasm other\archer\trunk\@rcher.asm %BIN%\@rcher
 fasm other\calc\calc.asm %BIN%\calc
-fasm other\mhc\trunk\mhc.asm %BIN%\mhc
+rem fasm other\mhc\trunk\mhc.asm %BIN%\mhc
 fasm other\period\period.asm %BIN%\period
 fasm other\rtfread\rtfread.asm %BIN%\rtfread
 
@@ -164,17 +164,16 @@ echo Building media
 echo *
 rem media\ac97snd\trunk\ac97snd.asm ac97snd
 fasm media\animage\animage.asm %BIN%\animage
-fasm media\cdp\trunk\cdp.asm %BIN%\cdp
-fasm media\gifview\trunk\gifview.asm %BIN%\gifview
-fasm media\iconedit\trunk\iconedit.asm %BIN%\iconedit
-fasm media\jpegview\trunk\jpegview.asm %BIN%\jpegview
-fasm media\midamp\trunk\midamp.asm %BIN%\midamp
-fasm media\midiplay\trunk\midiplay.asm %BIN%\midiplay
-fasm media\mixer\trunk\mixer.asm %BIN%\mixer
-
-fasm media\mv\trunk\mv.asm %BIN%\mv
-fasm media\pic4\trunk\pic4.asm %BIN%\pic4
-fasm media\sb\trunk\sb.asm %BIN%\sb
+rem fasm media\cdp\trunk\cdp.asm %BIN%\cdp
+rem fasm media\gifview\trunk\gifview.asm %BIN%\gifview
+rem fasm media\iconedit\trunk\iconedit.asm %BIN%\iconedit
+rem fasm media\jpegview\trunk\jpegview.asm %BIN%\jpegview
+fasm media\midamp\midamp.asm %BIN%\midamp
+fasm media\midiplay\midiplay.asm %BIN%\midiplay
+rem fasm media\mixer\trunk\mixer.asm %BIN%\mixer
+rem fasm media\mv\trunk\mv.asm %BIN%\mv
+fasm media\pic4\pic4.asm %BIN%\pic4
+rem fasm media\sb\trunk\sb.asm %BIN%\sb
 fasm media\scrshoot\scrshoot.asm %BIN%\scrshoot
 
 echo *
@@ -183,9 +182,9 @@ echo *
 fasm games\15\trunk\15.asm %BIN%\games\15
 fasm games\arcanii\trunk\arcanii.asm %BIN%\games\arcanii
 fasm games\arcanoid\trunk\arcanoid.asm %BIN%\games\arcanoid
-cd games\c4\trunk\
+pushd games\c4\trunk\
 nasmw -f bin -o ..\..\..\%BIN%\games\c4 c4.asm
-cd ..\..\..
+popd
 fasm games\freecell\freecell.asm %BIN%\games\freecell
 fasm games\mblocks\trunk\mblocks.asm %BIN%\games\mblocks
 fasm games\phenix\trunk\phenix.asm %BIN%\games\phenix
@@ -201,31 +200,31 @@ rem fasm games\hunter\trunk\hunter.asm %BIN%\games\hunter
 echo *
 echo Building demos
 echo *
-fasm demos\3dcube2\trunk\3dcube2.asm %BIN%\3d\3dcube2
-rem fasm demos\3detx60b\trunk\3detx60b.asm %BIN%\3d\3detx60b
-fasm demos\3dtcub10\trunk\3dtcub10.asm %BIN%\3d\3dtcub10
-cd demos\aclock\trunk\
+fasm demos\3dcube2\3dcube2.asm %BIN%\3d\3dcube2
+rem fasm demos\3detx60b\3detx60b.asm %BIN%\3d\3detx60b
+fasm demos\3dtcub10\3dtcub10.asm %BIN%\3d\3dtcub10
+pushd demos\aclock\
 nasmw -t -f bin -o ..\..\..\%BIN%\demos\aclock aclock.asm
-cd ..\..\..
-fasm demos\bcdclk\trunk\bcdclk.asm %BIN%\demos\bcdclk
-fasm demos\bgitest\trunk\bgitest.asm %BIN%\fonts\bgitest
-fasm demos\colorref\trunk\colorref.asm %BIN%\demos\colorref
-fasm demos\crownscr\trunk\crownscr.asm %BIN%\3d\crownscr
-fasm demos\cslide\trunk\cslide.asm %BIN%\demos\cslide
-fasm demos\eyes\trunk\eyes.asm %BIN%\demos\eyes
-fasm demos\fire\trunk\fire.asm %BIN%\demos\fire
-fasm demos\fire2\trunk\fire2.asm %BIN%\demos\fire2
-fasm demos\firework\trunk\firework.asm %BIN%\demos\firework
-fasm demos\free3d04\trunk\free3d04.asm %BIN%\3d\free3d04
-fasm demos\magnify\trunk\magnify.asm %BIN%\magnify
-fasm demos\movback\trunk\movback.asm %BIN%\demos\movback
-fasm demos\plasma\trunk\plasma.asm %BIN%\demos\plasma
-fasm demos\timer\trunk\timer.asm %BIN%\demos\timer
-fasm demos\tinyfrac\trunk\tinyfrac.asm %BIN%\demos\tinyfrac
-fasm demos\transp\trunk\transp.asm %BIN%\demos\transp
-fasm demos\trantest\trunk\trantest.asm %BIN%\demos\trantest
-fasm demos\tube\trunk\tube.asm %BIN%\demos\tube
-fasm demos\unvwater\trunk\unvwater.asm %BIN%\demos\unvwater
+popd
+fasm demos\bcdclk\bcdclk.asm %BIN%\demos\bcdclk
+rem fasm demos\bgitest\trunk\bgitest.asm %BIN%\fonts\bgitest
+fasm demos\colorref\colorref.asm %BIN%\demos\colorref
+fasm demos\crownscr\crownscr.asm %BIN%\3d\crownscr
+fasm demos\cslide\cslide.asm %BIN%\demos\cslide
+fasm demos\eyes\eyes.asm %BIN%\demos\eyes
+fasm demos\fire\fire.asm %BIN%\demos\fire
+fasm demos\fire2\fire2.asm %BIN%\demos\fire2
+fasm demos\firework\firework.asm %BIN%\demos\firework
+fasm demos\free3d04\free3d04.asm %BIN%\3d\free3d04
+rem fasm demos\magnify\trunk\magnify.asm %BIN%\magnify
+fasm demos\movback\movback.asm %BIN%\demos\movback
+fasm demos\plasma\plasma.asm %BIN%\demos\plasma
+fasm demos\timer\timer.asm %BIN%\demos\timer
+fasm demos\tinyfrac\tinyfrac.asm %BIN%\demos\tinyfrac
+fasm demos\transp\transp.asm %BIN%\demos\transp
+fasm demos\trantest\trantest.asm %BIN%\demos\trantest
+fasm demos\tube\tube.asm %BIN%\demos\tube
+fasm demos\unvwater\unvwater.asm %BIN%\demos\unvwater
 
 echo *
 echo Building depend application for fdd's nightbuild
@@ -234,14 +233,14 @@ echo __nightbuild fix yes >> config.inc
 fasm media\kiv\kiv.asm %BIN%\nightbuild\kiv
 fasm media\scrshoot\scrshoot.asm %BIN%\nightbuild\scrshoot
 fasm media\animage\animage.asm %BIN%\nightbuild\animage
-fasm media\midamp\trunk\midamp.asm %BIN%\nightbuild\midamp
-fasm develop\heed\trunk\heed.asm %BIN%\nightbuild\heed
-fasm develop\tinypad\trunk\tinypad.asm %BIN%\nightbuild\tinypad
-fasm system\skincfg\trunk\skincfg.asm %BIN%\nightbuild\skincfg
-fasm system\hdd_info\trunk\hdd_info.asm %BIN%\nightbuild\hdd_info
-fasm system\mgb\trunk\mgb.asm %BIN%\nightbuild\mgb
-fasm system\rdsave\trunk\rdsave.asm %BIN%\nightbuild\rdsave
-fasm other\kpack\trunk\kpack.asm %BIN%\nightbuild\kpack
+fasm media\midamp\midamp.asm %BIN%\nightbuild\midamp
+fasm develop\heed\heed.asm %BIN%\nightbuild\heed
+fasm develop\tinypad\tinypad.asm %BIN%\nightbuild\tinypad
+fasm system\skincfg\skincfg.asm %BIN%\nightbuild\skincfg
+fasm system\hdd_info\hdd_info.asm %BIN%\nightbuild\hdd_info
+fasm testing\mgb\mgb.asm %BIN%\nightbuild\mgb
+fasm system\rdsave\rdsave.asm %BIN%\nightbuild\rdsave
+fasm other\kpack\kpack.asm %BIN%\nightbuild\kpack
 fasm other\rtfread\rtfread.asm %BIN%\nightbuild\rtfread
 ;restore
 echo __CPU_type fix %res% > config.inc
@@ -300,7 +299,7 @@ echo *
 echo Compressing develop
 echo *
 
-kpack %BIN%\cmd
+rem kpack %BIN%\cmd
 kpack %BIN%\develop\fasm
 kpack %BIN%\develop\h2d2b
 kpack %BIN%\demos\heed
@@ -324,10 +323,10 @@ echo *
 echo Compressing fs
 echo *
 
-kpack %BIN%\copy2
+rem kpack %BIN%\copy2
 kpack %BIN%\copyr
 kpack %BIN%\kfar
-kpack %BIN%\sysxtree
+rem kpack %BIN%\sysxtree
 
 echo *
 echo Compressing network
@@ -367,7 +366,7 @@ echo *
 
 rem kpack %BIN%\@rcher
 kpack %BIN%\calc
-kpack %BIN%\mhc
+rem kpack %BIN%\mhc
 kpack %BIN%\period
 kpack %BIN%\rtfread
 
@@ -376,10 +375,10 @@ echo Compressing media
 echo *
 
 kpack %BIN%\animage
-kpack %BIN%\cdp
-kpack %BIN%\gifview
-kpack %BIN%\iconedit
-kpack %BIN%\jpegview
+rem kpack %BIN%\cdp
+rem kpack %BIN%\gifview
+rem kpack %BIN%\iconedit
+rem kpack %BIN%\jpegview
 kpack %BIN%\midamp
 kpack %BIN%\midiplay
 kpack %BIN%\mixer

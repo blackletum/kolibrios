@@ -13,6 +13,7 @@
 ; esi -> path string in UTF-8
 ;   out:
 ; eax, ebx = return values for sysfunc 70
+
 iglobal
 align 4
 ext_user_functions:
@@ -44,15 +45,15 @@ struct INODE
 accessMode      dw  ?
 UID             dw  ?
 fileSize        dd  ?
-accessedTime    dd  ?
-inodeModified   dd  ?
-dataModified    dd  ?
-deletedTime     dd  ?
+aTime           dd  ?
+cTime           dd  ?
+mTime           dd  ?
+dTime           dd  ?
 GID             dw  ?
 linksCount      dw  ?
 sectorsUsed     dd  ?
 featureFlags    dd  ?
-reserved        dd  ?
+reserved        dd  ?  ; Can be used as iversionLow
 blockNumbers    rd  12
 addressBlock    dd  ?
 doubleAddress   dd  ?
@@ -60,24 +61,65 @@ tripleAddress   dd  ?
 generation      dd  ?
 ACL             dd  ?
 fileSizeHigh    dd  ?
+obsoFAddr       dd  ?
+reserved2       rb  8
+checksumLow     dw  ?
+checksumLowPad  dw  ?
+; === extra_i_size ===
+extraISize      dw  ?
+checksumHigh    dw  ?
+cTimeExtra      dd  ?
+mTimeExtra      dd  ?
+aTimeExtra      dd  ?
+crTime          dd  ?
+crTimeExtra     dd  ?
+reserved3       dd  ?  ; Can be used as iversionHigh
+projectID       dd  ?
 ends
 
 struct BGDESCR  ; block group descriptor
-blockBitmap         dd  ?
-inodeBitmap         dd  ?
-inodeTable          dd  ?
-blocksFree          dw  ?
-inodesFree          dw  ?
-directoriesCount    dw  ?
-reserved            rb  14
+blockBitmap_lo      dd  ?
+inodeBitmap_lo      dd  ?
+inodeTable_lo       dd  ?
+blocksFree_lo       dw  ?
+inodesFree_lo       dw  ?
+directoriesCount_lo dw  ?
+flags               dw  ?
+excludeBitmap_lo    dd  ?
+blockBitmapCsum_lo  dw  ?
+inodeBitmapCsum_lo  dw  ?
+itableUnused_lo     dw  ?
+checksum            dw  ?
+; === 64-bit ===
+blockBitmap_hi      dd  ?
+inodeBitmap_hi      dd  ?
+inodeTable_hi       dd  ?
+blocksFree_hi       dw  ?
+inodesFree_hi       dw  ?
+directoriesCount_hi dw  ?
+itableUnused_hi     dw  ?
+excludeBitmap_hi    dd  ?
+blockBitmapCsum_hi  dw  ?
+inodeBitmapCsum_hi  dw  ?
+reserved            dd  ?
 ends
+
+macro load_bgd_64 dest_hi, dest_lo, base_reg, field {
+    local .done
+    mov     dest_lo, [base_reg + BGDESCR.#field#_lo]
+    xor     dest_hi, dest_hi
+    cmp     [ebp+EXTFS.descShift], 6
+    jc      .done
+    mov     dest_hi, [base_reg + BGDESCR.#field#_hi]
+.done:
+}
 
 struct SUPERBLOCK
 inodesTotal         dd  ?
-blocksTotal         dd  ?
-blocksReserved      dd  ?
-blocksFree          dd  ?
-inodesFree          dd  ?
+blocksTotal_lo      dd  ?
+blocksReserved_lo   dd  ?
+blocksFree_lo       dd  ?
+inodesFree_lo       dd  ?
 firstGroupBlock     dd  ?
 sectorsPerBlockLog  dd  ?   ; shift for 1024
 fragmentSizeLog     dd  ?
@@ -106,6 +148,31 @@ incompatibleFlags   dd  ?
 RO_compatibleFlags  dd  ?
 UUID                rb  16
 volumeLabel         rb  16
+lastMounted         rb  64
+algorithmBitmap     dd  ?
+preallocFields      dd  ?
+journalUUID         rb  16
+journalInode        dd  ?
+journalDevice       dd  ?
+lastOrphan          dd  ?
+hashSeed            rd  4
+hashVersion         db  ?
+journalBackupType   db  ?
+descSize            dw  ?
+defaultMountOpts    dd  ?
+firstMetaBg         dd  ?
+mkfsTime            dd  ?
+journalBlocks       rd  17
+blocksTotal_hi      dd  ?
+blocksReserved_hi   dd  ?
+blocksFree_hi       dd  ?
+minExtraISize       dw  ?
+wantExtraISize      dw  ?
+Flags               dd  ?
+csum_seed_padding   rb  268
+checksumSeed        dd  ?
+checksum_padding    rb  392
+checksum            dd  ?
 ends
 
 ; ext4 extent tree
@@ -132,32 +199,68 @@ fsBlock         dd  ?
 ends
 
 ROOT_INODE = 2
-EXTENTS_USED = 80000h
 TYPE_MASK = 0F000h
 FLAG_FILE = 8000h
 DIRECTORY = 4000h
+FLAG_SYMLINK = 0A000h
 DIR_FLAG_FILE = 1
 DIR_DIRECTORY = 2
+DIR_SYMLINK = 7
 KOS_HIDDEN = 2
 KOS_DIRECTORY = 10h
 READ_ONLY = 1
+SYMLINK_MAX_DEPTH = 40
+FAST_SYMLINK_MAX_SIZE = 60
+
+EXT2_GOOD_OLD_REV = 0
+EXT2_GOOD_OLD_INODE_SIZE = 128
+EXT2_GOOD_OLD_FIRST_INO = 11
+
+; Inode Feature Flags
+EXTENTS_USED        = 80000h
+EXT4_IMMUTABLE_FL   = 10h
+EXT4_APPEND_ONLY_FL = 20h
+EXT4_NOATIME_FL     = 80h
+; File System Feature Flags
+INCOMPAT_64BIT          = 80h
+INCOMPAT_CSUM_SEED      = 2000h
+RO_COMPAT_METADATA_CSUM = 400h
+RO_COMPAT_GDT_CSUM      = 10h    ; Not supported but need to check it for csum validation on RO.
+CSUM_FLAGS = RO_COMPAT_GDT_CSUM or RO_COMPAT_METADATA_CSUM
+
+EXT_CRC_POLY = 82F63B78h
+
+INODE_CSUM_REQ_SIZE = 160
+EXT2_BGDESCR_SHIFT  = 5
+EXT_CSUM_FAKE_TAIL  = 0DEh
 
 ; Implemented "incompatible" features:
 ; 2 = have file type in directory entry
-; 40h = extents
-; 200h = flexible block groups
-INCOMPATIBLE_SUPPORT = 242h
+;   40h = extents
+;   80h = 64bit
+;  200h = flexible block groups
+; 2000h = metadata_csum_seed
+INCOMPATIBLE_SUPPORT = 22C2h
 ; Read only support for "incompatible" features:
 INCOMPATIBLE_READ_SUPPORT = 240h
 
+; Mount policies
+MOUNT_POLICY_NOATIME = 0
+MOUNT_POLICY_ATIME = 1
+MOUNT_POLICY_RELATIME = 2
+
 ; Implemented "read-only" features:
-; 1 = sparse superblock
-; 2 = 64-bit file size
-READ_ONLY_SUPPORT = 3
+;  1 = sparse superblock
+;  2 = 64-bit file size
+; 40 = extra inode size
+;400 = metadata checksum
+READ_ONLY_SUPPORT = 443h
 
 struct EXTFS PARTITION
 Lock                MUTEX
 mountType           dd  ?
+descShift           db  ?
+descSize            dd  ?
 bytesPerBlock       dd  ?
 sectorsPerBlock     dd  ?
 dwordsPerBlock      dd  ?
@@ -168,12 +271,100 @@ descriptorTable     dd  ?
 descriptorTableEnd  dd  ?
 align0  rb  200h-EXTFS.align0
 superblock          SUPERBLOCK
-align1  rb  400h-EXTFS.align1
+align1  rb  600h-EXTFS.align1
 rootInodeBuffer     INODE
-align2  rb  600h-EXTFS.align2
+align2  rb  800h-EXTFS.align2
 inodeBuffer         INODE
-align3  rb  800h-EXTFS.align3
+align3  rb  0A00h-EXTFS.align3
+symlink_workspace   rb  maxPathLength
+symlink_depth       dd  ?
+MOUNT_POLICY        dd  ? ; TODO: add proper mount syscall
+c_inode             dd  ?
+c_sz                dd  ?
+c_curino            dd  ?
+csumSeed            dd  ?
 ends
+
+ext_report_unsupported_features:
+        mov     ecx, [ebx+SUPERBLOCK.incompatibleFlags]
+        and     ecx, not INCOMPATIBLE_SUPPORT
+        movi    edx, 1
+        mov     eax, incompat_feature_report_table
+.loop:
+        test    ecx, ecx
+        jz      .done
+        shr     ecx, 1
+        jnc     @f
+        DEBUGF  1, "K : %s: 0x%x (%s)\n", ext_msg_incompat_feature, edx, [eax]
+@@:
+        shl     edx, 1
+        add     eax, 4
+        jmp     .loop
+.done:
+        ret
+
+; ext incompatible features from the superblock
+; See: https://www.kernel.org/doc/html/latest/filesystems/ext4/super.html#super-incompat
+iglobal
+ext_msg_feature:
+.compression    db 'compression', 0
+.filetype       db 'filetype', 0
+.recover        db 'recover', 0
+.journal_dev    db 'journal_dev', 0
+.meta_bg        db 'meta_bg', 0
+.extents        db 'extents', 0
+.64bit          db '64bit', 0
+.mmp            db 'mmp', 0
+.flex_bg        db 'flex_bg', 0
+.ea_inode       db 'ea_inode', 0
+.dirdata        db 'dirdata', 0
+.csum_seed      db 'csum_seed', 0
+.largedir       db 'largedir', 0
+.inline_data    db 'inline_data', 0
+.encrypt        db 'encrypt', 0
+.casefold       db 'casefold', 0
+.unknown        db 'unknown', 0
+
+ext_msg_incompat_feature db "EXT: unsupported incompatible feature", 0
+
+align 4
+incompat_feature_report_table:
+        dd      ext_msg_feature.compression
+        dd      ext_msg_feature.filetype
+        dd      ext_msg_feature.recover
+        dd      ext_msg_feature.journal_dev
+        dd      ext_msg_feature.meta_bg
+        dd      ext_msg_feature.unknown
+        dd      ext_msg_feature.extents
+        dd      ext_msg_feature.64bit
+        dd      ext_msg_feature.mmp
+        dd      ext_msg_feature.flex_bg
+        dd      ext_msg_feature.ea_inode
+        dd      ext_msg_feature.unknown
+        dd      ext_msg_feature.dirdata
+        dd      ext_msg_feature.csum_seed
+        dd      ext_msg_feature.largedir
+        dd      ext_msg_feature.inline_data
+        dd      ext_msg_feature.encrypt
+        dd      ext_msg_feature.casefold
+        dd      ext_msg_feature.unknown
+        dd      ext_msg_feature.unknown
+        dd      ext_msg_feature.unknown
+        dd      ext_msg_feature.unknown
+        dd      ext_msg_feature.unknown
+        dd      ext_msg_feature.unknown
+        dd      ext_msg_feature.unknown
+        dd      ext_msg_feature.unknown
+        dd      ext_msg_feature.unknown
+        dd      ext_msg_feature.unknown
+        dd      ext_msg_feature.unknown
+        dd      ext_msg_feature.unknown
+        dd      ext_msg_feature.unknown
+        dd      ext_msg_feature.unknown
+incompat_feature_report_table_end:
+endg
+
+assert (incompat_feature_report_table_end - incompat_feature_report_table) / 4 = 32
 
 ; mount if it's a valid EXT partition
 ext2_create_partition:
@@ -196,9 +387,17 @@ ext2_create_partition:
         cmp     [ebx+SUPERBLOCK.state], 1
         ja      .fail
         test    [ebx+SUPERBLOCK.incompatibleFlags], not INCOMPATIBLE_SUPPORT
-        jnz     .fail
+        jz      .features_supported
+        call    ext_report_unsupported_features
+        jmp     .fail
+.features_supported:
         cmp     [ebx+SUPERBLOCK.sectorsPerBlockLog], 6  ; 64KB
         ja      .fail
+        cmp     [ebx+SUPERBLOCK.dynamicVersionFlag], EXT2_GOOD_OLD_REV
+        jne     @f
+        mov     [ebx+SUPERBLOCK.inodeSize], EXT2_GOOD_OLD_INODE_SIZE
+        mov     [ebx+SUPERBLOCK.firstInode], EXT2_GOOD_OLD_FIRST_INO
+@@:
         cmp     [ebx+SUPERBLOCK.inodeSize], 512
         ja      .fail
         cmp     [ebx+SUPERBLOCK.blocksPerGroup], 0
@@ -228,7 +427,23 @@ ext2_create_partition:
         mov     esi, ebx
         lea     edi, [ebp+EXTFS.superblock]
         mov     ecx, 512/4
-        rep movsd   ; copy superblock
+        rep movsd   ; copy first half of superblock
+
+        push    ebx
+        mov     ebx, edi            ; ebx = destination (ebp + EXTFS.superblock + 512)
+        xchg    ebp, [esp + 12]     ; Swap EBP (EXTFS) with stack (PARTITION pointer)
+        mov     eax, 3              ; Read sector 3
+        call    fs_read32_sys
+        xchg    ebp, [esp + 12]     ; Restore EBP (EXTFS pointer)
+        pop     ebx                 ; Restore scratch buffer pointer
+        test    eax, eax
+        jnz     .error
+
+        push    ebx
+        lea     ebx, [ebp+EXTFS.superblock]
+        call    mount_check_csum
+        pop     ebx
+        jc      .error
         mov     ecx, [ebx+SUPERBLOCK.sectorsPerBlockLog]
         inc     ecx
         mov     eax, 1
@@ -249,19 +464,31 @@ ext2_create_partition:
         add     eax, [ebp+EXTFS.bytesPerBlock]
         mov     [ebp+EXTFS.tempBlockBuffer], eax
         mov     [ebp+EXTFS.mountType], 0
+        mov     [ebp+EXTFS.MOUNT_POLICY], MOUNT_POLICY_NOATIME
         test    [ebx+SUPERBLOCK.RO_compatibleFlags], not READ_ONLY_SUPPORT
         jnz     .read_only
+        cmp     [ebx+SUPERBLOCK.blocksTotal_hi], 0 ; Only support writing for lower fields
+        jnz     .error2
         test    [ebx+SUPERBLOCK.incompatibleFlags], INCOMPATIBLE_READ_SUPPORT
         jz      @f
 .read_only:
         or      [ebp+EXTFS.mountType], READ_ONLY
 @@:
+        movi    eax, 1 shl EXT2_BGDESCR_SHIFT
+        test    [ebx+SUPERBLOCK.incompatibleFlags], INCOMPAT_64BIT
+        jz      @f
+        movzx   eax, [ebx+SUPERBLOCK.descSize]
+@@:
+        mov     [ebp+EXTFS.descSize], eax
+        bsf     eax, eax
+        mov     [ebp+EXTFS.descShift], al
         mov     eax, [ebx+SUPERBLOCK.inodesTotal]
         dec     eax
         xor     edx, edx
         div     [ebx+SUPERBLOCK.inodesPerGroup]
         inc     eax
-        shl     eax, 5
+        movzx   ecx, [ebp+EXTFS.descShift]
+        shl     eax, cl
         push    eax eax
         call    kernel_alloc
         pop     ecx
@@ -302,6 +529,42 @@ ext2_create_partition:
         xor     eax, eax
         ret
 
+mount_check_csum:
+; loads csum seed and checks csum at mount
+; in: ebx -> SUPERBLOCK
+; out: CF set on error
+        push    edx
+        test    [ebx+SUPERBLOCK.RO_compatibleFlags], RO_COMPAT_METADATA_CSUM
+        jz      .success
+
+        ; Verify superblock checksum
+        movi    eax, -1
+        stdcall crc_32, EXT_CRC_POLY, ebx, 1020  ; 1020 = sizeof(SUPERBLOCK) - sizeof(checksum)
+        cmp     eax, [ebx+SUPERBLOCK.checksum]
+        jnz     .fail
+
+        ; Load or compute checksum seed
+        test    [ebx+SUPERBLOCK.incompatibleFlags], INCOMPAT_CSUM_SEED
+        jz      .compute_seed
+
+        mov     eax, [ebx+SUPERBLOCK.checksumSeed]
+        mov     [ebp+EXTFS.csumSeed], eax
+        jmp     .success
+
+.compute_seed:
+        mov     eax, -1
+        lea     edx, [ebx+SUPERBLOCK.UUID]
+        stdcall crc_32, EXT_CRC_POLY, edx, 16
+        mov     [ebp+EXTFS.csumSeed], eax
+
+.success:
+        clc
+.exit:
+        pop     edx
+        ret
+.fail:
+        stc
+        jmp     .exit
 ; unmount EXT partition
 ext_free:
 ; in: eax -> EXTFS structure
@@ -319,9 +582,9 @@ extfsReadBlock:
         push    fs_read64_sys
 @@:
         push    ecx edx
+        mul     [ebp+EXTFS.sectorsPerBlock]
         mov     ecx, [ebp+EXTFS.sectorsPerBlock]
-        mul     ecx
-        call    dword[esp+8]
+        call    dword [esp+8]
         pop     edx ecx
         add     esp, 4
         test    eax, eax
@@ -331,17 +594,76 @@ extfsReadBlock:
 @@:
         ret
 
+calc_block_bitmap_csum:
+; in: ebx = block group descriptor
+        test    [ebp+EXTFS.superblock.RO_compatibleFlags], RO_COMPAT_METADATA_CSUM
+        jz      .ret
+        push    eax ecx edx
+        mov     eax, [ebp+EXTFS.csumSeed]
+        mov     edx, [ebp+EXTFS.tempBlockBuffer]
+        mov     ecx, [ebp+EXTFS.superblock.blocksPerGroup]
+        shr     ecx, 3
+        stdcall crc_32, EXT_CRC_POLY, edx, ecx
+        mov     [ebx+BGDESCR.blockBitmapCsum_lo], ax
+        cmp     [ebp+EXTFS.descSize], 64
+        jb      @f
+        shr     eax, 16
+        mov     [ebx+BGDESCR.blockBitmapCsum_hi], ax
+@@:
+        pop     edx ecx eax
+.ret:
+        ret
+
+calc_inode_bitmap_csum:
+; in: ebx = block group descriptor
+        test    [ebp+EXTFS.superblock.RO_compatibleFlags], RO_COMPAT_METADATA_CSUM
+        jz      .ret
+        push    eax ecx edx
+        mov     eax, [ebp+EXTFS.csumSeed]
+        mov     edx, [ebp+EXTFS.tempBlockBuffer]
+        mov     ecx, [ebp+EXTFS.superblock.inodesPerGroup]
+        shr     ecx, 3
+        stdcall crc_32, EXT_CRC_POLY, edx, ecx
+        mov     [ebx+BGDESCR.inodeBitmapCsum_lo], ax
+        cmp     [ebp+EXTFS.descSize], 64
+        jb      @f
+        shr     eax, 16
+        mov     [ebx+BGDESCR.inodeBitmapCsum_hi], ax
+@@:
+        pop     edx ecx eax
+.ret:
+        ret
+
+
 extfsWriteDescriptor:
 ; in: ebx = block group descriptor
+        test    [ebp+EXTFS.superblock.RO_compatibleFlags], RO_COMPAT_METADATA_CSUM
+        jz      .skip_csum
+        mov     [ebx + BGDESCR.checksum], 0
+        mov     eax, ebx
+        sub     eax, [ebp+EXTFS.descriptorTable]
+        movzx   ecx, [ebp+EXTFS.descShift]
+        shr     eax, cl          ; group index = byte offset >> descShift
+        push    eax
+        mov     eax, [ebp+EXTFS.csumSeed]
+        mov     edx, esp
+        mov     ecx, [ebp+EXTFS.descSize]
+        stdcall crc_32, EXT_CRC_POLY, edx, 4
+        add     esp, 4
+        stdcall crc_32, EXT_CRC_POLY, ebx, ecx
+        mov     [ebx + BGDESCR.checksum], ax
+.skip_csum:
         mov     eax, [ebp+EXTFS.superblock.firstGroupBlock]
         inc     eax
         mul     [ebp+EXTFS.sectorsPerBlock]
         sub     ebx, [ebp+EXTFS.descriptorTable]
         shr     ebx, 9
         add     eax, ebx
+        adc     edx, 0
         shl     ebx, 9
         add     ebx, [ebp+EXTFS.descriptorTable]
-        call    fs_write32_sys
+        movi    ecx, 1
+        call    fs_write64_sys
         ret
 
 extfsExtentFree:
@@ -354,23 +676,25 @@ extfsExtentFree:
         sub     ebx, edx
         sub     ebx, ecx
         jc      .ret
-        push    edx
         mov     ebx, [ebp+EXTFS.descriptorTable]
-        shl     eax, 5
+        push    ecx
+        mov     cl, [ebp+EXTFS.descShift]
+        shl     eax, cl
+        pop     ecx
         add     ebx, eax
+        push    ebx
+        push    edx
         mov     eax, ecx
         mul     [ebp+EXTFS.sectorsPerBlock]
-        add     [ebx+BGDESCR.blocksFree], cx
-        add     [ebp+EXTFS.superblock.blocksFree], ecx
+        add     [ebx+BGDESCR.blocksFree_lo], cx
+        add     [ebp+EXTFS.superblock.blocksFree_lo], ecx
         sub     [ebp+EXTFS.inodeBuffer.sectorsUsed], eax
-        push    [ebx+BGDESCR.blockBitmap]
-        call    extfsWriteDescriptor
-        pop     eax
+        mov     eax, [ebx+BGDESCR.blockBitmap_lo]
         mov     ebx, [ebp+EXTFS.tempBlockBuffer]
         mov     edx, eax
         call    extfsReadBlock
         pop     eax
-        jc      .ret
+        jc      .error
         push    ebx edx
         mov     edi, eax
         shr     edi, 5
@@ -406,12 +730,20 @@ extfsExtentFree:
         shl     eax, cl
         and     [edi], eax
 @@:
-        pop     eax ebx
+        pop     eax ebx edi
+        push    eax ebx
+        mov     ebx, edi
+        call    calc_block_bitmap_csum
+        call    extfsWriteDescriptor
+        pop     ebx eax
         call    extfsWriteBlock
 .ret:
         pop     edi edx ebx
         xor     eax, eax
         ret
+.error:
+        add     esp, 4
+        jmp     .ret
 
 extfsInodeAlloc:
 ; in: eax = parent inode number
@@ -421,20 +753,19 @@ extfsInodeAlloc:
         xor     edx, edx
         div     [ebp+EXTFS.superblock.inodesPerGroup]
         mov     ebx, [ebp+EXTFS.descriptorTable]
-        shl     eax, 5
+        mov     cl, [ebp+EXTFS.descShift]
+        shl     eax, cl
         add     ebx, eax
         push    ebx
 .test_block_group:
         push    ebx
-        cmp     [ebx+BGDESCR.blocksFree], 0
+        cmp     [ebx+BGDESCR.blocksFree_lo], 0
         jz      .next
-        cmp     [ebx+BGDESCR.inodesFree], 0
+        cmp     [ebx+BGDESCR.inodesFree_lo], 0
         jz      .next
-        dec     [ebx+BGDESCR.inodesFree]
-        dec     [ebp+EXTFS.superblock.inodesFree]
-        push    [ebx+BGDESCR.inodeBitmap]
-        call    extfsWriteDescriptor
-        pop     eax
+        dec     [ebx+BGDESCR.inodesFree_lo]
+        dec     [ebp+EXTFS.superblock.inodesFree_lo]
+        mov     eax, [ebx+BGDESCR.inodeBitmap_lo]
         mov     ebx, [ebp+EXTFS.tempBlockBuffer]
         mov     edx, eax
         mov     edi, ebx
@@ -454,11 +785,35 @@ extfsInodeAlloc:
         shl     edi, 3
         add     eax, edi
         mov     ecx, eax
+
+        test    [ebp+EXTFS.superblock.RO_compatibleFlags], CSUM_FLAGS
+        jz      .skip_itable_unused
+        push    ebx
+        mov     ebx, [esp+4]
+        mov     eax, [ebp+EXTFS.superblock.inodesPerGroup]
+        dec     eax
+        sub     eax, ecx
+        cmp     [ebx+BGDESCR.itableUnused_lo], ax
+        jbe     @f
+        mov     [ebx+BGDESCR.itableUnused_lo], ax
+@@:
+        pop     ebx
+.skip_itable_unused:
+
+        push    ebx edx ecx
+        mov     ebx, [esp+12]
+        call    calc_inode_bitmap_csum
+        call    extfsWriteDescriptor
+        pop     ecx edx ebx
+
         mov     eax, edx
         call    extfsWriteBlock
         pop     eax
         sub     eax, [ebp+EXTFS.descriptorTable]
-        shr     eax, 5
+        push    ecx
+        mov     cl, [ebp+EXTFS.descShift]
+        shr     eax, cl
+        pop     ecx
         mul     [ebp+EXTFS.superblock.inodesPerGroup]
         lea     ebx, [eax+ecx+1]
         xor     eax, eax
@@ -470,12 +825,12 @@ extfsInodeAlloc:
         pop     ebx
         cmp     ebx, [esp]
         jc      .backward
-        add     ebx, 32
+        add     ebx, [ebp+EXTFS.descSize]
         cmp     ebx, [ebp+EXTFS.descriptorTableEnd]
         jc      .test_block_group
         mov     ebx, [esp]
 .backward:
-        sub     ebx, 32
+        sub     ebx, [ebp+EXTFS.descSize]
         cmp     ebx, [ebp+EXTFS.descriptorTable]
         jnc     .test_block_group
         movi    eax, ERROR_DISK_FULL
@@ -492,14 +847,15 @@ extfsExtentAlloc:
         xor     edx, edx
         div     [ebp+EXTFS.superblock.inodesPerGroup]
         mov     ebx, [ebp+EXTFS.descriptorTable]
-        shl     eax, 5
+        mov     cl, [ebp+EXTFS.descShift]
+        shl     eax, cl
         add     ebx, eax
         push    ebx
 .test_block_group:
         push    ebx
-        cmp     [ebx+BGDESCR.blocksFree], 0
+        cmp     [ebx+BGDESCR.blocksFree_lo], 0
         jz      .next
-        mov     eax, [ebx+BGDESCR.blockBitmap]
+        mov     eax, [ebx+BGDESCR.blockBitmap_lo]
         mov     ebx, [ebp+EXTFS.tempBlockBuffer]
         mov     edx, eax
         mov     edi, ebx
@@ -598,15 +954,17 @@ extfsExtentAlloc:
         call    extfsWriteBlock
         mov     ebx, [esp]
         mov     ecx, [esp+8]
-        sub     [ebx+BGDESCR.blocksFree], cx
+        sub     [ebx+BGDESCR.blocksFree_lo], cx
         jnc     @f
-        mov     [ebx+BGDESCR.blocksFree], 0
+        mov     [ebx+BGDESCR.blocksFree_lo], 0
 @@:
-        sub     [ebp+EXTFS.superblock.blocksFree], ecx
+        sub     [ebp+EXTFS.superblock.blocksFree_lo], ecx
+        call    calc_block_bitmap_csum
         call    extfsWriteDescriptor
         pop     eax ebx
         sub     eax, [ebp+EXTFS.descriptorTable]
-        shr     eax, 5
+        mov     cl, [ebp+EXTFS.descShift]
+        shr     eax, cl
         mul     [ebp+EXTFS.superblock.blocksPerGroup]
         mov     ebx, eax
         add     ebx, esi
@@ -624,12 +982,12 @@ extfsExtentAlloc:
         pop     ebx
         cmp     ebx, [esp]
         jc      .backward
-        add     ebx, 32
+        add     ebx, [ebp+EXTFS.descSize]
         cmp     ebx, [ebp+EXTFS.descriptorTableEnd]
         jc      .test_block_group
         mov     ebx, [esp]
 .backward:
-        sub     ebx, 32
+        sub     ebx, [ebp+EXTFS.descSize]
         cmp     ebx, [ebp+EXTFS.descriptorTable]
         jnc     .test_block_group
         movi    eax, ERROR_DISK_FULL
@@ -702,7 +1060,7 @@ extfsGetExtent:
         ret
 
 .listTreeSearch:
-        cmp     ecx, 12
+        cmp     ecx, 12         ; number of direct block pointers
         jb      .get_direct_block
         sub     ecx, 12
         cmp     ecx, [ebp+EXTFS.dwordsPerBlock]
@@ -790,50 +1148,114 @@ extfsGetExtent:
 
 getInodeLocation:
 ; in: eax = inode number
-; out: eax = inode sector, edx = offset in sector
+; out: edx:eax = inode sector, ecx = offset in sector
         dec     eax
         xor     edx, edx
         div     [ebp+EXTFS.superblock.inodesPerGroup]
-        shl     eax, 5
+        mov     cl, [ebp+EXTFS.descShift]
+        shl     eax, cl
+        push    edx
         add     eax, [ebp+EXTFS.descriptorTable]
-        mov     ebx, [eax+BGDESCR.inodeTable]
-        imul    ebx, [ebp+EXTFS.sectorsPerBlock]
-        movzx   eax, [ebp+EXTFS.superblock.inodeSize]
-        mul     edx
-        mov     edx, eax
-        shr     eax, 9
-        and     edx, 511
+        mov     ebx, eax
+        load_bgd_64 ecx, eax, ebx, inodeTable
+        imul    ecx, [ebp+EXTFS.sectorsPerBlock]
+        mul     [ebp+EXTFS.sectorsPerBlock]
+        add     edx, ecx
+        pop     ebx
+        movzx   ecx, [ebp+EXTFS.superblock.inodeSize]
+        imul    ebx, ecx
+        mov     ecx, ebx
+        shr     ebx, 9
+        and     ecx, 511
         add     eax, ebx
+        adc     edx, 0
         ret
+
+writeInode_no_cTime:
+        push    edx
+        xor     edx, edx
+        dec     edx
+        jmp     @f
 
 writeInode:
 ; in: eax = inode number, ebx -> inode data
-        push    edx edi esi ecx ebx eax
+        push    edx
+        xor     edx, edx
+@@:
+        push    edi esi ecx ebx eax
         mov     edi, ebx
-        call    fsGetTime
-        add     eax, 978307200
-        mov     [edi+INODE.inodeModified], eax
+        cmp     edx, -1
+        je      .ignoreCTime
+        lea     eax, [edi+INODE.cTime]
+        xor     edx, edx
+        dec     edx
+        cmp     [edi+INODE.extraISize], 8 ; cTime extra exists
+        jb      .noCTimeExtra
+        lea     edx, [edi+INODE.cTimeExtra]
+.noCTimeExtra:
+        stdcall ext_write_time, eax, edx
+.ignoreCTime:
         pop     eax
-        cmp     eax, ROOT_INODE
-        jnz     @f
+        test    [ebp+EXTFS.superblock.RO_compatibleFlags], RO_COMPAT_METADATA_CSUM
+        jz      .skip_checksum
+        push    eax                               ; save eax for getInodeLocation
         movzx   ecx, [ebp+EXTFS.superblock.inodeSize]
+        mov     [edi + INODE.checksumLow], 0
+        cmp     ecx, 128
+        jbe     @f
+        cmp     [edi + INODE.extraISize], 4
+        jb      @f
+        mov     [edi + INODE.checksumHigh], 0
+@@:
+        push    [edi + INODE.generation] eax
+        mov     eax, [ebp+EXTFS.csumSeed]
+        mov     edx, esp
+        stdcall crc_32, EXT_CRC_POLY, edx, 8
+        add     esp, 8
+        stdcall crc_32, EXT_CRC_POLY, edi, ecx
+        mov     [edi + INODE.checksumLow], ax
+        cmp     ecx, 128
+        jbe     @f
+        cmp     [edi + INODE.extraISize], 4
+        jb      @f
+        shr     eax, 16
+        mov     [edi + INODE.checksumHigh], ax
+@@:
+        pop     eax                               ; restore inode number
+.skip_checksum:
+        cmp     eax, ROOT_INODE
+        jnz     .not_root
+        movzx   ecx, [ebp+EXTFS.superblock.inodeSize]
+        cmp     ecx, INODE_CSUM_REQ_SIZE
+        jbe     @f
+        movi    ecx, INODE_CSUM_REQ_SIZE
+@@:
         mov     esi, edi
         lea     edi, [ebp+EXTFS.rootInodeBuffer]
         rep movsb
-@@:
+.not_root:
         call    getInodeLocation
+        push    edx eax ecx
         mov     ebx, [ebp+EXTFS.tempBlockBuffer]
-        mov     ecx, eax
-        call    fs_read32_sys
+        mov     ecx, 1
+        call    fs_read64_sys
+        pop     edi ; Offset
         test    eax, eax
-        jnz     @f
-        mov     eax, ecx
+        jz      .no_error
+        add     esp, 8
+        jmp     @f
+.no_error:
+        pop     eax edx
         movzx   ecx, [ebp+EXTFS.superblock.inodeSize]
-        mov     edi, edx
+        cmp     ecx, INODE_CSUM_REQ_SIZE
+        jbe     .smaller_size
+        movi    ecx, INODE_CSUM_REQ_SIZE
+.smaller_size:
         add     edi, ebx
         mov     esi, [esp]
         rep movsb
-        call    fs_write32_sys
+        mov     ecx, 1
+        call    fs_write64_sys
 .ret:
         pop     ebx ecx esi edi edx
         ret
@@ -848,15 +1270,37 @@ readInode:
         push    edx edi esi ecx ebx
         mov     edi, ebx
         call    getInodeLocation
+        push    ecx ; Save the offset
         mov     ebx, [ebp+EXTFS.tempBlockBuffer]
-        call    fs_read32_sys
+        mov     ecx, 1
+        call    fs_read64_sys
+        pop     edx ; Restore the offset
         test    eax, eax
         jnz     @b
-        movzx   ecx, [ebp+EXTFS.superblock.inodeSize]
+        mov     ecx, 128
         mov     esi, edx
         add     esi, ebx
         rep movsb
+
+        test    [ebp+EXTFS.superblock.RO_compatibleFlags], 40h
+        jz      .zero_all
+
+        movzx   eax, word [esi]
+        cmp     eax, 32
+        jbe     @f
+        mov     eax, 32
+@@:
+        mov     ecx, eax
+        rep movsb
+        mov     ecx, 32
+        sub     ecx, eax
+        jmp     .zero_rest
+
+.zero_all:
+        mov     ecx, 32
+.zero_rest:
         xor     eax, eax
+        rep stosb
         pop     ebx ecx esi edi edx
         ret
 
@@ -1407,6 +1851,30 @@ extfsTruncateFile:
 .ret:
         ret
 
+calc_dirblock_csum:
+; in: ecx = inode number
+        test    [ebp+EXTFS.superblock.RO_compatibleFlags], RO_COMPAT_METADATA_CSUM
+        jz      .ret
+        push    eax ebx ecx edx edi
+        mov     edi, [ebp+EXTFS.tempBlockBuffer]
+        mov     eax, [ebp+EXTFS.csumSeed]
+        push    ecx                             ; push inode number for CRC
+        mov     edx, esp
+        stdcall crc_32, EXT_CRC_POLY, edx, 4
+        lea     edx, [ebp+EXTFS.inodeBuffer.generation]
+        stdcall crc_32, EXT_CRC_POLY, edx, 4
+        mov     edx, edi
+        mov     ecx, [ebp+EXTFS.bytesPerBlock]
+        sub     ecx, 12                         ; 12-byte dir entry checksum tail
+        stdcall crc_32, EXT_CRC_POLY, edx, ecx
+        add     esp, 4
+        mov     ecx, [ebp+EXTFS.bytesPerBlock]
+        mov     [edi+ecx-4], eax
+        pop     edi edx ecx ebx eax
+.ret:
+        ret
+
+
 linkInode:
 ;   in:
 ; eax = inode on which to link
@@ -1478,8 +1946,10 @@ linkInode:
         mov     [edi+DIRENTRY.entryLength], ax
         cmp     eax, ecx
         jge     .found
-        mov     [edi+DIRENTRY.inodeNumber], 0
+        movi    [edi+DIRENTRY.inodeNumber], 0
         pop     eax
+        mov     ecx, [esp+24]
+        call    calc_dirblock_csum
         mov     ebx, [ebp+EXTFS.tempBlockBuffer]
         call    extfsWriteBlock
         jmp     @b
@@ -1501,6 +1971,13 @@ linkInode:
         push    eax
         mov     edi, [ebp+EXTFS.tempBlockBuffer]
         mov     eax, [ebp+EXTFS.bytesPerBlock]
+        test    [ebp+EXTFS.superblock.RO_compatibleFlags], RO_COMPAT_METADATA_CSUM
+        jz      .no_csum_tail
+        sub     eax, 12  ; 12-byte dir entry checksum tail
+        movi    [edi+eax+DIRENTRY.inodeNumber], 0
+        mov     [edi+eax+DIRENTRY.entryLength], 12
+        mov     word [edi+eax+DIRENTRY.nameLength], EXT_CSUM_FAKE_TAIL shl 8  ; nameLength=0, fileType=EXT_CSUM_FAKE_TAIL
+.no_csum_tail:
         mov     [edi+DIRENTRY.entryLength], ax
 .found:
         pop     edx ecx ecx ecx ebx esi
@@ -1517,8 +1994,21 @@ linkInode:
         add     edi, 8
         rep movsb
         mov     eax, edx
+        mov     ecx, [esp+4]
+        call    calc_dirblock_csum
         mov     ebx, [ebp+EXTFS.tempBlockBuffer]
         call    extfsWriteBlock
+        lea     ebx, [ebp+EXTFS.inodeBuffer]
+        lea     eax, [ebx+INODE.mTime]
+        mov     edx, -1
+        cmp     [ebx+INODE.extraISize], 12
+        jb      .no_extra_mTime
+        lea     edx, [ebx+INODE.mTimeExtra]
+.no_extra_mTime:
+        stdcall ext_write_time, eax, edx
+
+        mov     eax, [esp+4]
+        call    writeInode
 @@:
         pop     edx ecx ecx ebx edi esi
         ret
@@ -1533,7 +2023,7 @@ linkInode:
 
 unlinkInode:
 ; in: eax = directory inode number, esi = inode to unlink
-        push    edi
+        push    eax edi
         lea     ebx, [ebp+EXTFS.inodeBuffer]
         call    readInode
         jc      .ret
@@ -1585,10 +2075,25 @@ unlinkInode:
 .write_block:
         pop     eax
         mov     eax, edi
+        mov     ecx, [esp+4]
+        call    calc_dirblock_csum
         mov     ebx, [ebp+EXTFS.tempBlockBuffer]
         call    extfsWriteBlock
+        lea     ebx, [ebp+EXTFS.inodeBuffer]
+        lea     eax, [ebx+INODE.mTime]
+        mov     edx, -1
+        cmp     [ebx+INODE.extraISize], 12
+        jb      .no_extra_mTime
+        lea     edx, [ebx+INODE.mTimeExtra]
+.no_extra_mTime:
+        stdcall ext_write_time, eax, edx
+
+        mov     eax, [esp+4]
+        call    writeInode
+
 .ret:
         pop     edi
+        pop     eax
         ret
 
 findInode:
@@ -1599,6 +2104,7 @@ findInode:
 ; [ebp+EXTFS.inodeBuffer] = last inode
 ; ecx = parent inode number
 ; CF=1 -> file not found, edi=0 -> error
+        mov     [ebp+EXTFS.symlink_depth], SYMLINK_MAX_DEPTH
         push    esi
         lea     esi, [ebp+EXTFS.rootInodeBuffer]
         lea     edi, [ebp+EXTFS.inodeBuffer]
@@ -1610,6 +2116,12 @@ findInode:
         mov     edi, esi
         cmp     [edx+INODE.fileSize], 0
         jz      .not_found
+.skip_root_slashes:
+        cmp     byte [esi], '/'
+        jne     @f
+        inc     esi
+        jmp     .skip_root_slashes
+@@:
         cmp     byte [esi], 0
         jnz     .next_path_part
         xor     eax, eax
@@ -1660,7 +2172,10 @@ findInode:
         je      @f
         cmp     byte [esi], '/'
         jne     @b
+.skip_slashes:
         inc     esi
+        cmp     byte [esi], '/'
+        je      .skip_slashes
 @@:
         pop     edx
 .stop:
@@ -1682,11 +2197,15 @@ findInode:
         push    eax
         call    readInode
         jc      .error
+        movzx   eax, [ebx+INODE.accessMode]
+        and     eax, TYPE_MASK
+; check if symlink
+        cmp     eax, FLAG_SYMLINK
+        jz      .resolve_symlink
+
         cmp     byte [esi], 0
         je      .ret
         mov     edx, ebx
-        movzx   eax, [ebx+INODE.accessMode]
-        and     eax, TYPE_MASK
         cmp     eax, DIRECTORY
         jz      .next_path_part
         xor     edi, edi    ; path folder is a file
@@ -1707,18 +2226,175 @@ findInode:
         pop     esi ecx ebx
         ret
 
+.resolve_symlink:
+        dec     [ebp+EXTFS.symlink_depth]
+        jns     @f
+        movi    eax, ERROR_TOO_MANY_LINKS
+        jmp     .error
+@@:
+        cmp     [ebp+EXTFS.symlink_depth], SYMLINK_MAX_DEPTH - 1
+        je      .setup_extraction       ; First hop - esi in shell memory
+
+.nested_symlink:
+; Symlink path is in symlink_workspace. esi points to the remaining path (tail).
+; Shift tail by symlink size to prevent overwriting during insertion.
+        push    edi ecx eax
+
+        ; Find tail length
+        mov     edi, esi
+        mov     ecx, -1
+        xor     al, al
+        repnz scasb
+        not     ecx                     ; ecx = tail length including null
+
+        ; Boundary overflow check
+        mov     eax, [ebx+INODE.fileSize]
+        lea     edi, [esi + eax]
+        add     edi, ecx
+        lea     eax, [ebp+EXTFS.symlink_workspace + maxPathLength]
+        cmp     edi, eax
+        ja      .error_nested
+
+        ; Shift
+        mov     eax, [ebx+INODE.fileSize]
+        lea     edi, [esi + ecx - 1]
+        add     edi, eax
+        lea     esi, [esi + ecx - 1]
+
+        std
+        rep movsb
+        cld
+
+        lea     esi, [edi + 1]
+        pop     eax ecx edi
+
+.setup_extraction:
+        push    esi                     ; Save the remaining path
+        lea     edi, [ebp+EXTFS.symlink_workspace]
+
+        cmp     [ebx+INODE.fileSize], FAST_SYMLINK_MAX_SIZE
+        jbe     .fast_symlink
+
+; The target path is longer than 60 bytes, so it's stored in the file's data blocks.
+.slow_symlink:
+        xor     ecx, ecx                  ; Logical block 0 for extfsGetExtent
+        mov     edx, [ebx+INODE.fileSize]
+        cmp     edx, maxPathLength
+        jae     .error_slow
+
+        push    ecx edx edi
+
+        call    extfsGetExtent
+        jc      .error_slow
+        mov     ebx, [ebp+EXTFS.tempBlockBuffer]
+        call    extfsReadBlock
+        jc      .error_slow
+
+        pop     edi edx ecx
+
+        push    esi
+        mov     esi, [ebp+EXTFS.tempBlockBuffer]
+        mov     ecx, edx
+        rep movsb
+        pop     esi
+
+        jmp     .symlink_merge
+
+; The target path is short enough, it's stored in the inode's block numbers.
+.fast_symlink:
+        lea     esi, [ebx+INODE.blockNumbers]
+        mov     ecx, [ebx+INODE.fileSize]
+        rep movsb
+
+.symlink_merge:
+        pop     esi                  ; Restore the remaining path
+
+        cmp     byte [esi], 0
+        jne     .symlink_copy_remaining
+        mov     byte [edi], 0
+        jmp     .symlink_check_type
+
+; Copy the remaining path to the symlink workspace
+.symlink_copy_remaining:
+; Skip adding '/' if the symlink already ends with it
+        cmp     byte [edi-1], '/'
+        je      @f
+        mov     byte [edi], '/'
+        inc     edi
+@@:
+        lodsb
+        stosb
+        test    al, al
+        jnz     @b
+
+.symlink_check_type:
+        lea     esi, [ebp+EXTFS.symlink_workspace]
+        cmp     byte [esi], '/'
+        jne     .relative_symlink
+
+; The target path starts with '/', it is absolute.
+        inc     esi
+        mov     dword [esp], ROOT_INODE
+        mov     dword [esp+4], ROOT_INODE
+
+        push    esi
+        lea     esi, [ebp+EXTFS.rootInodeBuffer]
+        lea     edi, [ebp+EXTFS.inodeBuffer]
+        movzx   ecx, [ebp+EXTFS.superblock.inodeSize]
+        rep movsb
+        pop     esi
+
+        lea     edx, [ebp+EXTFS.inodeBuffer]
+
+        cmp     byte [esi], 0
+        jz      .ret
+        jmp     .next_path_part
+
+; The target path does not start with '/', it is relative to the current directory.
+.relative_symlink:
+        mov     eax, [esp+4]
+        mov     [esp], eax
+
+        lea     ebx, [ebp+EXTFS.inodeBuffer]
+        push    eax
+        call    readInode
+        add     esp, 4
+        jc      .error
+
+        mov     edx, ebx
+        jmp     .next_path_part
+
+.error_nested:
+        pop     eax ecx edi
+        jmp     .error
+
+.error_slow:
+        add     esp, 12
+        pop     esi
+        jmp     .error
+
 writeSuperblock:
-        push    ebx
+        push    ebx ecx edx
+        test    [ebp+EXTFS.superblock.RO_compatibleFlags], RO_COMPAT_METADATA_CSUM
+        jz      .skip_csum
+        movi    eax, -1
+        lea     edx, [ebp+EXTFS.superblock]
+        stdcall crc_32, EXT_CRC_POLY, edx, 1020  ; 1020 = sizeof(SUPERBLOCK) - sizeof(checksum)
+        mov     [ebp+EXTFS.superblock.checksum], eax
+.skip_csum:
         mov     eax, 2
+        xor     edx, edx
+        movi    ecx, 2  ; 2 sectors for 1024-byte superblock
         lea     ebx, [ebp+EXTFS.superblock]
-        call    fs_write32_sys
-        pop     ebx
+        call    fs_write64_sys
+        pop     edx ecx ebx
         ret
 
 extfsWritingInit:
         movi    eax, ERROR_UNSUPPORTED_FS
         test    [ebp+EXTFS.mountType], READ_ONLY
         jnz     @f
+        movi    [ebp+EXTFS.c_inode], -1   ; Wipe directory cache so GUI refreshes see new/deleted files
 ext_lock:
         lea     ecx, [ebp+EXTFS.Lock]
         jmp     mutex_lock
@@ -1732,6 +2408,132 @@ ext_unlock:
         lea     ecx, [ebp+EXTFS.Lock]
         jmp     mutex_unlock
 
+ext_read_time:
+; in:  eax = i_*time (32-bit, UNIX epoch)
+;      edx = i_*TimeExtra (32-bit), or 0 if not valid
+;      edi -> bdfe time destination (advanced by fsTime2bdfe)
+        and     edx, 3              ; mask ext4 extra epoch bits
+        test    eax, eax            ; is i_time negative?
+        jns     @f
+        dec     edx                 ; apply ext4 sign-extension trick
+@@:
+        sub     eax, UNIXTIME_TO_KOS_OFFSET
+        sbb     edx, 0              ; 64-bit offset subtraction
+        js      .clamp_0            ; if edx < 0, it's before KOS epoch (pre-2001)
+        jnz     .clamp_max          ; if edx > 0, it exceeds KOS 32-bit limit (post-2137)
+.convert:
+        push    ecx
+        call    fsTime2bdfe
+        pop     ecx
+        ret
+.clamp_0:
+        xor     eax, eax
+        jmp     .convert
+.clamp_max:
+        mov     eax, 0xFFFFFFFF
+        jmp     .convert
+
+;----------------------------------------------------------------
+ext_read_all_times:
+        movzx   ecx, [esi+INODE.extraISize]
+        cmp     ecx, 24         ; 4 (base extra) + 5*4 bytes covers crTimeExtra
+        jae     .has_all_extra
+        ; slow path: partial or no extra fields
+        sub     ecx, 4
+        jb      .no_extra
+        shr     ecx, 2          ; ecx = number of *Extra fields present
+        jmp     .partial
+.no_extra:
+        xor     ecx, ecx
+.partial:
+        cmp     ecx, 4
+        jb      .use_ctime
+        mov     eax, [esi+INODE.crTime]
+        xor     edx, edx
+        jmp     @f
+.use_ctime:
+        mov     eax, [esi+INODE.cTime]
+        xor     edx, edx
+        cmp     ecx, 1
+        jb      @f
+        mov     edx, [esi+INODE.cTimeExtra]
+@@:
+        call    ext_read_time
+        mov     eax, [esi+INODE.aTime]
+        xor     edx, edx
+        cmp     ecx, 3
+        jb      @f
+        mov     edx, [esi+INODE.aTimeExtra]
+@@:
+        call    ext_read_time
+        mov     eax, [esi+INODE.mTime]
+        xor     edx, edx
+        cmp     ecx, 2
+        jb      @f
+        mov     edx, [esi+INODE.mTimeExtra]
+@@:
+        jmp     ext_read_time
+.has_all_extra:
+        ; fast path: all Extra fields up to crTimeExtra are present
+        mov     eax, [esi+INODE.crTime]
+        mov     edx, [esi+INODE.crTimeExtra]
+        call    ext_read_time
+        mov     eax, [esi+INODE.aTime]
+        mov     edx, [esi+INODE.aTimeExtra]
+        call    ext_read_time
+        mov     eax, [esi+INODE.mTime]
+        mov     edx, [esi+INODE.mTimeExtra]
+        jmp     ext_read_time
+
+;----------------------------------------------------------------
+; in:
+; eax = inode number
+; esi -> inode buffer
+; ebp -> EXTFS structure
+; out: eax = 0
+;----------------------------------------------------------------
+proc update_aTime uses esi ebx
+        push    eax
+        mov     al, byte [ebp+EXTFS.MOUNT_POLICY]
+        cmp     al, MOUNT_POLICY_NOATIME
+        je      .skip
+        test    [ebp+EXTFS.mountType], READ_ONLY
+        jnz     .skip
+        test    [esi+INODE.featureFlags], EXT4_NOATIME_FL
+        jnz     .skip
+
+        call    fsGetTime
+        add     eax, UNIXTIME_TO_KOS_OFFSET
+
+        ; Relatime Check A: Is aTime <= mTime?
+        mov     ecx, [esi+INODE.aTime]
+        cmp     ecx, [esi+INODE.mTime]
+        jbe     .write_time
+
+        ; Relatime Check B: Has it been 24 hours?
+        add     ecx, 24*60*60   ; ecx = old aTime + 24 hours
+        cmp     eax, ecx
+        jb      .skip
+
+.write_time:
+        mov     [esi+INODE.aTime], eax
+
+        cmp     [esi+INODE.extraISize], 16
+        jb      .commit_to_disk
+        xor     ecx, ecx
+        mov     [esi+INODE.aTimeExtra], ecx
+
+.commit_to_disk:
+        mov     ebx, esi
+        mov     eax, [esp]
+        call    writeInode_no_cTime
+
+.skip:
+        pop     eax
+        xor     eax, eax        ; Return 0
+        ret
+endp
+
 ;----------------------------------------------------------------
 ext_ReadFolder:
         call    ext_lock
@@ -1739,12 +2541,14 @@ ext_ReadFolder:
         jz      .root_folder
         call    findInode
         jc      .error_ret
+        mov     [ebp+EXTFS.c_curino], esi
         lea     esi, [ebp+EXTFS.inodeBuffer]
         test    [esi+INODE.accessMode], FLAG_FILE
         jnz     .error_not_found
         jmp     @f
 
 .root_folder:
+        mov     [ebp+EXTFS.c_curino], ROOT_INODE
         lea     esi, [ebp+EXTFS.rootInodeBuffer]
         lea     edi, [ebp+EXTFS.inodeBuffer]
         movzx   ecx, [ebp+EXTFS.superblock.inodeSize]
@@ -1777,7 +2581,8 @@ ext_ReadFolder:
         mov     [edi+24], eax
         mov     ecx, [edi+16]
 .find_wanted_start:
-        jecxz   .find_wanted_end
+        test    ecx, ecx
+        jz      .find_wanted_end
 .find_wanted_cycle:
         cmp     [ebx+DIRENTRY.inodeNumber], 0
         jz      @f
@@ -1812,7 +2617,17 @@ ext_ReadFolder:
         ret
 
 .wanted_end:
-        loop    .find_wanted_cycle
+        mov     eax, [ebp+EXTFS.c_curino]
+        cmp     eax, [ebp+EXTFS.c_inode]
+        jne     @f
+        mov     eax, [ebp+EXTFS.c_sz]
+        test    eax, eax
+        jz      @f
+        mov     [edi+4], eax
+        jmp     .end_dir
+@@:
+        dec     ecx
+        jnz     .find_wanted_cycle
 .find_wanted_end:
         mov     ecx, [edi+20]
 .wanted_start:
@@ -1834,17 +2649,7 @@ ext_ReadFolder:
         jc      .error_read_subinode
         mov     esi, ebx
         lea     edi, [edx+8]
-        mov     eax, [ebx+INODE.inodeModified]
-        sub     eax, 978307200  ; 01.01.1970-01.01.2001 = (365*31+8)*24*60*60
-        call    fsTime2bdfe
-
-        mov     eax, [esi+INODE.accessedTime]
-        sub     eax, 978307200
-        call    fsTime2bdfe
-
-        mov     eax, [esi+INODE.dataModified]
-        sub     eax, 978307200
-        call    fsTime2bdfe
+        call    ext_read_all_times
         pop     edx
         or      dword [edx], KOS_DIRECTORY
         test    [esi+INODE.accessMode], FLAG_FILE
@@ -1865,15 +2670,14 @@ ext_ReadFolder:
         lea     edi, [edx+40]
         cmp     byte [edx+4], 3
         jz      .utf8
-        add     ecx, esi
         cmp     byte [edx+4], 2
         jz      .utf16
 @@:
-        call    utf8to16
-        call    uni2ansi_char
+        call    unicode.utf8.decode
+        call    unicode.cp866.encode
         stosb
-        cmp     esi, ecx
-        jc      @b
+        test    ecx, ecx
+        jnz     @b
         and     byte [edi], 0
         add     edx, 40+264
 @@:
@@ -1899,15 +2703,24 @@ ext_ReadFolder:
         jmp     @b
 
 .utf16:
-        call    utf8to16
+        call    unicode.utf8.decode
+        call    unicode.utf16.encode
         stosw
-        cmp     esi, ecx
-        jc      .utf16
+        shr     eax, 16
+        jz      .utf16_no_high
+        stosw
+.utf16_no_high:
+        test    ecx, ecx
+        jnz     .utf16
         and     word [edi], 0
         add     edx, 40+520
         jmp     @b
 
 .end_dir:
+        mov     eax, [ebp+EXTFS.c_curino]
+        mov     [ebp+EXTFS.c_inode], eax
+        mov     eax, [edi+4]
+        mov     [ebp+EXTFS.c_sz], eax
         call    ext_unlock
         mov     edx, [edi+28]
         mov     ebx, [edi+8]
@@ -1917,9 +2730,14 @@ ext_ReadFolder:
         mov     [edx+8], ecx
         lea     esp, [edi+32]
         mov     ecx, 20/4
-        lea     edi, [edx+12]
+        lea     edx, [edx+12]
+        xchg    edi, edx
         xor     eax, eax
         rep stosd
+        cmp     ebx, [edx+20]   ; read files vs files to read
+        jz      @f
+        movi    eax, ERROR_END_OF_FILE
+@@:
         ret
 
 .error_bad_len:
@@ -1949,10 +2767,10 @@ ext_ReadFile:
         pushd   0 eax
         jc      .ret
         lea     esi, [ebp+EXTFS.inodeBuffer]
-        mov     byte [esp], ERROR_ACCESS_DENIED
+        mov     dword [esp], ERROR_ACCESS_DENIED
         test    [esi+INODE.accessMode], FLAG_FILE
         jz      .ret    ; not a file
-        mov     byte [esp], ERROR_END_OF_FILE
+        mov     dword [esp], ERROR_END_OF_FILE
         mov     eax, [esi+INODE.fileSize]
         mov     edx, [esi+INODE.fileSizeHigh]
         sub     eax, [ebx+4]
@@ -1966,6 +2784,8 @@ ext_ReadFile:
         mov     [esp], eax
 @@:
         add     ecx, eax
+        mov     eax, [esp+4]
+        call    update_aTime
         mov     eax, [ebx+4]
         mov     edx, [ebx+8]
         mov     edi, [ebx+16]
@@ -2075,17 +2895,7 @@ ext_GetFileInfo:
         mov     dword [edx+36], ebx
 @@:
         lea     edi, [edx+8]
-        mov     eax, [esi+INODE.inodeModified]
-        sub     eax, 978307200  ; 01.01.1970-01.01.2001 = (365*31+8)*24*60*60
-        call    fsTime2bdfe
-
-        mov     eax, [esi+INODE.accessedTime]
-        sub     eax, 978307200
-        call    fsTime2bdfe
-
-        mov     eax, [esi+INODE.dataModified]
-        sub     eax, 978307200
-        call    fsTime2bdfe
+        call    ext_read_all_times
         xor     eax, eax
 .ret:
         push    eax
@@ -2112,15 +2922,14 @@ ext_GetFileInfo:
         add     edi, 40
         cmp     eax, 3
         jz      .utf8
-        add     ecx, esi
         cmp     eax, 2
         jz      .utf16
 @@:
-        call    utf8to16
-        call    uni2ansi_char
+        call    unicode.utf8.decode
+        call    unicode.cp866.encode
         stosb
-        cmp     esi, ecx
-        jc      @b
+        test    ecx, ecx
+        jnz     @b
         jmp     @f
 
 .utf8:
@@ -2128,35 +2937,72 @@ ext_GetFileInfo:
         jmp     @f
 
 .utf16:
-        call    utf8to16
+        call    unicode.utf8.decode
+        call    unicode.utf16.encode
         stosw
-        cmp     esi, ecx
-        jc      .utf16
+        shr     eax, 16
+        jz      .utf16_no_high
+        stosw
+.utf16_no_high:
+        test    ecx, ecx
+        jnz     .utf16
 @@:
         xor     eax, eax
         mov     [edi], ax
         ret
+
+proc ext_write_time uses ebx esi edi, time_ptr, extra_time_ptr
+        call    fsGetTime
+        xor     edx, edx
+        add     eax, UNIXTIME_TO_KOS_OFFSET
+        adc     edx, 0
+        test    eax, eax
+        jns     @f
+        inc     edx
+@@:
+        mov     ecx, [time_ptr]
+        mov     [ecx], eax
+
+        mov     ecx, [extra_time_ptr]
+        cmp     ecx, -1
+        je      .done
+        and     edx, 3
+        mov     [ecx], edx
+
+.done:
+        ret
+endp
 
 ;----------------------------------------------------------------
 ext_SetFileInfo:
         call    extfsWritingInit
         call    findInode
         jc      @f
+        lea     edi, [ebp+EXTFS.inodeBuffer]
+        test    [edi+INODE.featureFlags], EXT4_IMMUTABLE_FL
+        jnz     .error_denied
         push    esi
         mov     esi, [ebx+16]
+
         add     esi, 16
-        lea     edi, [ebp+EXTFS.inodeBuffer]
         call    fsCalculateTime
-        add     eax, 978307200  ; 01.01.1970-01.01.2001 = (365*31+8)*24*60*60
-        mov     [edi+INODE.accessedTime], eax
+        add     eax, UNIXTIME_TO_KOS_OFFSET
+        mov     [edi+INODE.aTime], eax
 
         add     esi, 8
         call    fsCalculateTime
-        add     eax, 978307200
-        mov     [edi+INODE.dataModified], eax
+        add     eax, UNIXTIME_TO_KOS_OFFSET
+        mov     [edi+INODE.mTime], eax
+
         mov     ebx, edi
         pop     eax
         call    writeInode
+        jc      @f
+        xor     eax, eax
+        jmp     @f
+.error_denied:
+        mov     eax, ERROR_ACCESS_DENIED
+        stc
 @@:
         push    eax
         jc      @f
@@ -2173,6 +3019,11 @@ ext_Delete:
         call    extfsWritingInit
         call    findInode
         jc      .error
+        lea     eax, [ebp+EXTFS.inodeBuffer]
+        test    [eax+INODE.featureFlags], EXT4_IMMUTABLE_FL
+        jnz     .error_denied
+        test    [eax+INODE.featureFlags], EXT4_APPEND_ONLY_FL
+        jnz     .error_denied
         push    ecx
         movzx   edi, [ebp+EXTFS.inodeBuffer.accessMode]
         and     edi, TYPE_MASK
@@ -2224,6 +3075,10 @@ ext_Delete:
         push    eax
         jmp     .ret
 
+.error_denied:
+        movi    eax, ERROR_ACCESS_DENIED
+        jmp     .error
+
 .empty:
         pop     ecx ecx
         cmp     eax, ERROR_END_OF_FILE
@@ -2259,38 +3114,45 @@ ext_Delete:
         rep stosb
         call    fsGetTime
         pop     ebx edi esi
-        add     eax, 978307200
-        mov     [ebx+INODE.deletedTime], eax
+        add     eax, UNIXTIME_TO_KOS_OFFSET
+        mov     [ebx+INODE.dTime], eax
         mov     eax, esi
         dec     eax
         xor     edx, edx
         div     [ebp+EXTFS.superblock.inodesPerGroup]
         push    edx
         mov     ebx, [ebp+EXTFS.descriptorTable]
-        shl     eax, 5
+        mov     cl, [ebp+EXTFS.descShift]
+        shl     eax, cl
         add     ebx, eax
         cmp     edi, DIRECTORY
         jnz     @f
-        dec     [ebx+BGDESCR.directoriesCount]
+        dec     [ebx+BGDESCR.directoriesCount_lo]
 @@:
-        inc     [ebx+BGDESCR.inodesFree]
-        push    [ebx+BGDESCR.inodeBitmap]
-        call    extfsWriteDescriptor
+        inc     [ebx+BGDESCR.inodesFree_lo]
+        push    ebx [ebx+BGDESCR.inodeBitmap_lo]
         pop     eax
         mov     ebx, [ebp+EXTFS.tempBlockBuffer]
         mov     ecx, eax
         call    extfsReadBlock
-        pop     edx
+        pop     ebx edx
         jc      .error
         mov     eax, edx
         and     edx, 31
         shr     eax, 5
         shl     eax, 2
-        add     eax, ebx
+        add     eax, [ebp+EXTFS.tempBlockBuffer]
         btr     [eax], edx
+
+        push    ecx
+        call    calc_inode_bitmap_csum
+        call    extfsWriteDescriptor
+        pop     ecx
+
         mov     eax, ecx
+        mov     ebx, [ebp+EXTFS.tempBlockBuffer]
         call    extfsWriteBlock
-        inc     [ebp+EXTFS.superblock.inodesFree]
+        inc     [ebp+EXTFS.superblock.inodesFree_lo]
 .hardlinks:
         mov     eax, esi
         lea     ebx, [ebp+EXTFS.inodeBuffer]
@@ -2303,6 +3165,48 @@ ext_Delete:
         call    ext_unlock
         xor     ebx, ebx
         pop     eax
+        ret
+
+initializeTimeFields:
+; in: ebp -> EXTFS, ebx -> INODE buffer
+        push    ebx
+        call    fsGetTime
+        pop     ebx
+        xor     edx, edx
+        add     eax, UNIXTIME_TO_KOS_OFFSET
+        adc     edx, 0
+        test    eax, eax
+        jns     @f
+        inc     edx
+@@:
+        and     edx, 3
+        mov     [ebx+INODE.aTime], eax
+        mov     [ebx+INODE.mTime], eax
+
+        ; calculate extended fields size (cap at 32)
+        movzx   ecx, [ebp+EXTFS.superblock.inodeSize]
+        sub     ecx, 128
+        jbe     .done
+        cmp     ecx, 32
+        jbe     @f
+        mov     ecx, 32
+@@:
+        mov     [ebx+INODE.extraISize], cx
+
+        ; populate extra fields
+        cmp     cx, 12
+        jb      .done
+        mov     [ebx+INODE.mTimeExtra], edx
+        cmp     cx, 16
+        jb      .done
+        mov     [ebx+INODE.aTimeExtra], edx
+        cmp     cx, 20
+        jb      .done
+        mov     [ebx+INODE.crTime], eax
+        cmp     cx, 24
+        jb      .done
+        mov     [ebx+INODE.crTimeExtra], edx
+.done:
         ret
 
 ;----------------------------------------------------------------
@@ -2320,11 +3224,8 @@ ext_CreateFolder:
         movzx   ecx, [ebp+EXTFS.superblock.inodeSize]
         xor     eax, eax
         rep stosb
-        call    fsGetTime
-        add     eax, 978307200
         lea     ebx, [ebp+EXTFS.inodeBuffer]
-        mov     [ebx+INODE.accessedTime], eax
-        mov     [ebx+INODE.dataModified], eax
+        call    initializeTimeFields
         pop     edi esi edx
 ; edx = allocated inode number, edi -> filename, esi = parent inode number
         mov     [ebx+INODE.accessMode], DIRECTORY or 511
@@ -2371,9 +3272,10 @@ ext_CreateFolder:
         xor     edx, edx
         div     [ebp+EXTFS.superblock.inodesPerGroup]
         mov     ebx, [ebp+EXTFS.descriptorTable]
-        shl     eax, 5
+        mov     cl, [ebp+EXTFS.descShift]
+        shl     eax, cl
         add     ebx, eax
-        inc     [ebx+BGDESCR.directoriesCount]
+        inc     [ebx+BGDESCR.directoriesCount_lo]
         call    extfsWriteDescriptor
 .success:
 .error:
@@ -2404,11 +3306,8 @@ ext_CreateFile:
         movzx   ecx, [ebp+EXTFS.superblock.inodeSize]
         xor     eax, eax
         rep stosb
-        call    fsGetTime
-        add     eax, 978307200
         lea     ebx, [ebp+EXTFS.inodeBuffer]
-        mov     [ebx+INODE.accessedTime], eax
-        mov     [ebx+INODE.dataModified], eax
+        call    initializeTimeFields
         pop     edi esi edx
 ; edx = allocated inode number, edi -> filename, esi = parent inode number
         mov     [ebx+INODE.accessMode], FLAG_FILE or 110110110b
@@ -2458,10 +3357,13 @@ ext_WriteFile:
         call    findInode
         pushd   0 eax
         jc      .ret
-        mov     byte [esp], ERROR_ACCESS_DENIED
+        mov     dword [esp], ERROR_ACCESS_DENIED
         test    [ebp+EXTFS.inodeBuffer.accessMode], FLAG_FILE
         jz      .ret    ; not a file
-        mov     byte [esp], 0
+        test    [ebp+EXTFS.inodeBuffer.featureFlags], EXT4_IMMUTABLE_FL
+        jnz     .error_denied
+        ; TODO: check EXT4_APPEND_ONLY_FL
+        mov     dword [esp], ERROR_SUCCESS
         mov     eax, [ebx+4]
         mov     edx, [ebx+8]
         add     eax, [ebx+12]
@@ -2562,12 +3464,22 @@ ext_WriteFile:
         mov     [esp+4], eax
 .done:
         lea     ebx, [ebp+EXTFS.inodeBuffer]
+        lea     eax, [ebx+INODE.mTime]
+        mov     edx, -1
+        cmp     [ebx+INODE.extraISize], 12
+        jb      @f
+        lea     edx, [ebx+INODE.mTimeExtra]
+@@:
+        stdcall ext_write_time, eax, edx
         pop     eax
         call    writeInode
         add     [esp], eax
         call    writeSuperblock
         mov     esi, [ebp+PARTITION.Disk]
         call    disk_sync
+        jmp     .ret
+.error_denied:
+        mov     dword [esp], ERROR_ACCESS_DENIED
 .ret:
         call    ext_unlock
         pop     eax ebx
@@ -2587,6 +3499,9 @@ ext_SetFileEnd:
         movi    eax, ERROR_ACCESS_DENIED
         test    [edi+INODE.accessMode], FLAG_FILE
         jz      .error2 ; not a file
+        test    [ebp+EXTFS.inodeBuffer.featureFlags], EXT4_IMMUTABLE_FL
+        jnz     .error_denied ; no permission
+        ; TODO: check EXT4_APPEND_ONLY_FL
         mov     eax, [ebx+4]
         mov     edx, [ebx+8]
         mov     ebx, [edi+INODE.fileSize]
@@ -2630,6 +3545,14 @@ ext_SetFileEnd:
         call    extfsTruncateFile
         pop     eax
 .done:
+        lea     ebx, [ebp+EXTFS.inodeBuffer]
+        lea     eax, [ebx+INODE.mTime]
+        mov     edx, -1
+        cmp     [ebx+INODE.extraISize], 12
+        jb      @f
+        lea     edx, [ebx+INODE.mTimeExtra]
+@@:
+        stdcall ext_write_time, eax, edx
         xor     eax, eax
 .error:
         xchg    eax, [esp]
@@ -2646,8 +3569,16 @@ ext_SetFileEnd:
         pop     eax
         ret
 
+.error_denied:
+        movi    eax, ERROR_ACCESS_DENIED
+        jmp     .error2
+
 ;----------------------------------------------------------------
 ext_Rename:
+; in: edi - path to rename
+;     esi - new path
+; out: eax - error code
+;----------------------------------------------------------------
         call    extfsWritingInit
         push    esi
         mov     esi, edi
@@ -2655,6 +3586,11 @@ ext_Rename:
         jnc     .error
         test    edi, edi
         jz      .error
+        lea     eax, [ebp+EXTFS.inodeBuffer]
+        test    [eax+INODE.featureFlags], EXT4_IMMUTABLE_FL
+        jnz     .error_denied
+        test    [eax+INODE.featureFlags], EXT4_APPEND_ONLY_FL
+        jnz     .error_denied
         xchg    [esp], esi
         push    edi
         call    findInode
@@ -2699,7 +3635,8 @@ ext_Rename:
         call    ext_unlock
         xor     eax, eax
         ret
-
+.error_denied:
+        mov     eax, ERROR_ACCESS_DENIED
 .error:
         push    eax
         call    ext_unlock

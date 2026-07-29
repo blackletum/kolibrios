@@ -1,3 +1,9 @@
+; SPDX-License-Identifier: NOASSERTION
+;
+
+; Text encoded with Code Page 866 - Cyrillic
+
+
     DEBUG = 0
 
     LIST_WIDTH  = 256
@@ -10,7 +16,7 @@
     use32
     org     0
     db      'MENUET01'
-    dd      1, main, dataend, memory, memory
+    dd      1, main, dataend, memory, stacktop
 M01header.params:
     dd      params, 0
 
@@ -18,7 +24,7 @@ M01header.params:
     include "../../macros.inc"
     include "../../dll.inc"
     include "../../string.inc"
-    include "../../develop/libraries/box_lib/trunk/box_lib.mac"
+    include "../../develop/libraries/box_lib/box_lib.mac"
 
     include "lang.inc" ; Language support for locales: ru_RU (CP866), et_EE, it_IT, en_US.
 
@@ -1062,5 +1068,6 @@ end if
  buffer8 rd 2048
  paramorig rb 2048
  _stack rb 2048
+ stacktop:
  params rb 256
  memory:

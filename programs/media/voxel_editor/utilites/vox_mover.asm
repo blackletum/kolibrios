@@ -1,3 +1,9 @@
+; SPDX-License-Identifier: NOASSERTION
+;
+
+; Text encoded with Code Page 866 - Cyrillic
+
+
 use32
 	org 0
 	db 'MENUET01' ;идентиф. исполняемого файла всегда 8 байт
@@ -8,9 +14,9 @@ include '../../../proc32.inc'
 include '../../../KOSfuncs.inc'
 include '../../../load_img.inc'
 include '../../../load_lib.mac'
-include '../trunk/vox_draw.inc'
-include '../trunk/vox_rotate.inc'
-include '../trunk/str.inc'
+include '../vox_draw.inc'
+include '../vox_rotate.inc'
+include '../str.inc'
 include 'lang.inc' ; Language support for locales: ru_RU (CP866), en_US.
 
 @use_library mem.Alloc,mem.Free,mem.ReAlloc,dll.Load

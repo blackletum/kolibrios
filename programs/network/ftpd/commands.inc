@@ -84,11 +84,12 @@ commands:               ; all commands must be in uppercase
 ;        dd 'APPE', login_first, login_first, login_first, cmd_APPE
         dd 'CDUP', login_first, login_first, login_first, cmdCDUP
         dd 'CWD',  login_first, login_first, login_first, cmdCWD
+        dd 'XCWD',  login_first, login_first, login_first, cmdCWD
         dd 'DELE', login_first, login_first, login_first, cmdDELE
-;        dd 'HELP', login_first, login_first, login_first, cmd_HELP
+        dd 'HELP', login_first, login_first, login_first, cmdHELP
         dd 'LIST', login_first, login_first, login_first, cmdLIST
 ;        dd 'MDTM', login_first, login_first, login_first, cmd_MDTM
-;        dd 'MKD',  login_first, login_first, login_first, cmd_MKD
+        dd 'MKD',  login_first, login_first, login_first, cmdMKD
 ;        dd 'MODE', login_first, login_first, login_first, cmd_MODE
 ;        dd 'NLST', login_first, login_first, login_first, cmdNLST
         dd 'NOOP', login_first, login_first, login_first, cmdNOOP
@@ -96,11 +97,12 @@ commands:               ; all commands must be in uppercase
         dd 'PASV', login_first, login_first, login_first, cmdPASV
         dd 'PORT', login_first, login_first, login_first, cmdPORT
         dd 'PWD',  login_first, login_first, login_first, cmdPWD
+        dd 'XPWD',  login_first, login_first, login_first, cmdPWD
         dd 'QUIT', cmdQUIT,     cmdQUIT,     cmdQUIT,     cmdQUIT
 ;        dd 'REIN', login_first, login_first, login_first, cmd_REIN
 ;        dd 'REST', login_first, login_first, login_first, cmd_REST
         dd 'RETR', login_first, login_first, login_first, cmdRETR
-;        dd 'RMD', login_first, login_first, login_first, cmd_RMD
+        dd 'RMD', login_first, login_first, login_first, cmdDELE
 ;        dd 'RNFR', login_first, login_first, login_first, cmd_RNFR
 ;        dd 'RNTO', login_first, login_first, login_first, cmd_RNTO
 ;        dd 'SITE', login_first, login_first, login_first, cmd_SITE
@@ -331,6 +333,35 @@ open_datasock:
 
         ret
 
+align 4
+fs_err_table:
+        dd str_fs_error2      ; 2
+        dd str_fs_error3      ; 3
+        dd str_fs_error       ; 4
+        dd str_fs_error5      ; 5
+        dd str_fs_error6      ; 6
+        dd str_fs_error7      ; 7
+        dd str_fs_error8      ; 8
+        dd str_fs_error9      ; 9
+        dd str_fs_error10     ; 10
+        dd str_fs_error11     ; 11
+        dd str_fs_error12     ; 12
+
+console_fs_error:
+        mov     edx, 4 ;  Unknown filesystem error
+
+        cmp     eax, 2
+        jb      .print_err
+        cmp     eax, 12
+        ja      .print_err
+
+        mov     edx, eax
+
+.print_err:
+        sub     edx, 2
+        mov     edx, [fs_err_table + edx*4]
+        invoke  con_write_asciiz, edx
+        ret
 
 ;------------------------------------------------
 ; "ABOR"
@@ -342,7 +373,7 @@ align 4
 cmdABOR:
 
         or      [ebp + thread_data.permissions], ABORT
-        sendFTP "250 Command succesul"
+        sendFTP "250 Command successful"
         ret
 
 ;------------------------------------------------
@@ -383,7 +414,7 @@ cmdCDUP:
         invoke  con_write_asciiz, eax
         invoke  con_write_asciiz, str_newline
 
-        sendFTP "250 Command succesul"
+        sendFTP "250 Command successful"
         ret
 
 ;------------------------------------------------
@@ -448,7 +479,7 @@ cmdCWD:
         invoke  con_write_asciiz, eax
         invoke  con_write_asciiz, str_newline
 
-        sendFTP "250 Command succesful"
+        sendFTP "250 Command successful"
         ret
 
   .err:
@@ -456,9 +487,9 @@ cmdCWD:
         ret
 
 ;------------------------------------------------
-; "DELE"
+; "DELE" & "RMD"
 ;
-; Delete a file from the server.
+; Delete a file/directory from the server.
 ;
 ;------------------------------------------------
 align 4
@@ -467,16 +498,24 @@ cmdDELE:
         test    [ebp + thread_data.permissions], PERMISSION_DELETE
         jz      permission_denied
 
-        ; Create path
-        cmp     ecx, 1024 + 5
+        ; "DELE <path>" and "RMD <path>" share this handler. Skip the
+        ; command + its trailing space to reach <path>: "RMD " = 4,
+        ; "DELE " = 5 bytes. RMD is the only 'R' command routed here.
+        mov     edx, 4                  ; strlen("RMD ")
+        cmp     byte[esi], 'R'
+        je      @f
+        cmp     byte[esi], 'r'
+        je      @f
+        mov     edx, 5                  ; strlen("DELE ")
+  @@:
+        sub     ecx, edx                ; ecx = <path> length
+        jb      .err                    ; command line shorter than prefix
+        cmp     ecx, 1024               ; <path> must fit the path buffer
         jae     .err
-
-        sub     ecx, 5
-        jb      .err
 
         call    create_path
         dec     edi
-        lea     esi, [ebp + thread_data.buffer + 5]
+        lea     esi, [ebp + thread_data.buffer + edx]
         mov     ecx, 1024
         cmp     byte [esi], '/'
         jne     .loop
@@ -510,10 +549,10 @@ cmdDELE:
         test    eax, eax
         jnz     .err
 
-        sendFTP "250 Command succesful"
+        sendFTP "250 Command successful"
         ret
 .err:
-        sendFTP "550 No such file"
+        sendFTP "550 Requested action not taken"
         ret
 
 ;------------------------------------------------
@@ -998,7 +1037,9 @@ cmdRETR:
         cmp     eax, -1
         je      .cannot_open                                    ; FIXME: this is not the correct error
 
+        push eax
         invoke  con_write_asciiz, str2
+        pop eax
 
         push    eax ebx
         mov     esi, eax
@@ -1243,6 +1284,167 @@ cmdTYPE:
         sendFTP "200 Command ok"
         ret
 
+;------------------------------------------------
+; "HELP"
+;
+; Provide help information.
+;
+;------------------------------------------------
+align 4
+cmdHELP:
+
+        lea     edi, [ebp + thread_data.buffer]
+        mov     eax, '214 '
+        stosd
+        mov     eax, 'Help'
+        stosd
+        mov     ax, ': '
+        stosw
+
+        mov     esi, commands               ; pointer to commands table
+
+.next_command:
+        cmp     byte [esi], 0               ; end of table?
+        je      .list_done
+
+        ; Copy command name (4 bytes), skip null bytes
+        mov     ecx, 4
+.copy_name:
+        mov     al, [esi]
+        test    al, al
+        jz      .skip_null
+        stosb
+.skip_null:
+        inc     esi
+        loop    .copy_name
+
+        ; Add space after command name
+        mov     al, ' '
+        stosb
+
+        ; Skip the four address pointers (16 bytes)
+        add     esi, 16
+        jmp     .next_command
+
+.list_done:
+        ; Remove trailing space (if any)
+        dec     edi
+        ; Add CRLF
+        mov     ax, 0x0a0d                  ; \r\n
+        stosw
+        xor     al, al                      ; null terminator
+        stosb
+
+        ; Calculate length
+        lea     edx, [ebp + thread_data.buffer]
+        sub     edi, edx
+
+        ; Send response
+        mcall   send, [ebp + thread_data.socketnum], edx, edi
+        ; Also log to console
+        invoke  con_write_asciiz, edx
+
+        ret
+
+;------------------------------------------------
+; "MKD"
+;
+; Create directory
+;
+;------------------------------------------------
+align 4
+cmdMKD:
+
+        test    [ebp + thread_data.permissions], PERMISSION_WRITE
+        jz      permission_denied
+
+        cmp     ecx, 1024 + 4
+        jae     .bad_request
+
+        cmp     byte [ebp + thread_data.buffer + 4], 0x20       ; argument given?
+        jb      .bad_request
+
+        call    create_path
+        dec     edi
+
+        lea     esi, [ebp + thread_data.buffer + 4]
+        mov     ecx, 1024
+        cmp     byte [esi], '/'
+        jne     .copy
+        inc     esi
+    .copy:
+        lodsb
+        cmp     al, 0x20
+        jb      .copied
+        stosb
+        loop    .copy
+    .copied:
+        mov     byte [edi], 0x00
+
+        lea     ebx, [ebp + thread_data.fpath]
+        invoke  con_write_asciiz, ebx
+        invoke  con_write_asciiz, str_newline
+        ; called fs function
+        push    ebx
+        dec     esp
+        mov     byte[esp], 0
+        push    dword 0
+        push    dword 0
+        push    dword 0
+        push    dword 0
+        push    dword SSF_CREATE_FOLDER
+        mov     ebx, esp
+        mcall   SF_FILE
+        add     esp, 6*4 + 1
+
+        test    eax, eax
+        jnz     .fs_error
+
+        ; RFC 959: reply 257 "<pathname>" created.
+        lea     edi, [ebp + thread_data.fpath]
+        mov     eax, '257 '
+        stosd
+        mov     al, '"'
+        stosb
+        lea     esi, [ebp + thread_data.work_dir]   ; current dir, ends with '/'
+    .reply_wd:
+        lodsb
+        cmp     al, 0x20
+        jb      .reply_name
+        stosb
+        jmp     .reply_wd
+    .reply_name:
+        lea     esi, [ebp + thread_data.buffer + 4] ; new dir name
+        cmp     byte [esi], '/'
+        jne     .reply_name_loop
+        inc     esi
+    .reply_name_loop:
+        lodsb
+        cmp     al, 0x20
+        jb      .reply_tail
+        stosb
+        jmp     .reply_name_loop
+    .reply_tail:
+        mov     esi, str_dir_created            ; '" created', 13, 10, 0
+    .reply_copy:
+        lodsb
+        test    al, al
+        jz      .reply_send
+        stosb
+        jmp     .reply_copy
+    .reply_send:
+        mov     ecx, [ebp + thread_data.socketnum]
+        lea     edx, [ebp + thread_data.fpath]
+        mov     esi, edi
+        sub     esi, edx
+        xor     edi, edi
+        mcall   send
+        ret
+    .fs_error:          ; real filesystem error: log it to console
+        call    console_fs_error
+    .bad_request:       ; malformed request: nothing to log
+        sendFTP "550 Create directory operation failed"
+        ret
 ;------------------------------------------------
 ; "USER"
 ;
