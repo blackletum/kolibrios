@@ -780,12 +780,6 @@ socket_close:
 
         cmp     [eax + SOCKET.Protocol], IP_PROTO_TCP
         jne     .free
-; No SS_ISCONNECTED gate here: tcp_disconnect already dispatches on the TCB
-; state and sends a not-yet-synchronized connection straight to tcp_close.
-; Gating on SS_ISCONNECTED meant a socket closed before the handshake
-; completed -- SYN_SENT, SYN_RECEIVED, LISTEN, or a never-connected one --
-; was neither disconnected nor freed: it stayed on net_sockets with its
-; timers armed and its TID pointing at a thread that would later exit.
         test    [eax + SOCKET.state], SS_ISDISCONNECTING
         jnz     @f
         call    tcp_disconnect
