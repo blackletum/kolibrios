@@ -111,19 +111,9 @@ proc tcp_timer_640ms
 
         DEBUGF  DEBUG_NETWORK_VERBOSE, "socket %x: Keepalive expired\n", eax
 
-; TCP_SOCKET.state is the inherited SOCKET.state, an SS_* bitmask -- comparing
-; it against a TCPS_* constant tested nothing. The TCB state is t_state.
-; Only embryonic connections (handshake never completed) are killed here;
-; anything synchronized gets a keepalive probe or a timer reset below, as in
-; BSD -- an idle ESTABLISHED connection without SO_KEEPALIVE must live on.
         cmp     [eax + TCP_SOCKET.t_state], TCPS_ESTABLISHED
         jae     .dont_kill
 
-; tcp_disconnect frees the socket outright when the connection is not yet
-; synchronized (t_state < ESTABLISHED goes straight to tcp_close), so the
-; walk has to remember where to go next BEFORE the call -- reloading
-; NextPtr afterwards read freed kernel heap. Same as the timed-wait branch
-; at the end of this loop.
         push    [eax + SOCKET.NextPtr]
         call    tcp_disconnect
         pop     eax
