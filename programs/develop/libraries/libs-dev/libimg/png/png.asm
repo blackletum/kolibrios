@@ -735,9 +735,9 @@ macro init_block
 	mov	ax, [esi]
 	convert_16_to_8
 	mov	[edi+2], al
-	;mov	ax, [esi+6]
-	;convert_16_to_8
-	;mov	[edi+3], al
+	mov	ax, [esi+6]
+	convert_16_to_8
+	mov	[edi+3], al
 	add	edi, 4
 	dec	ecx
 	jnz	.rgb_alpha2_16bit.innloop2
@@ -926,18 +926,21 @@ local .l1
 	init_block
 	lea	eax, [edi+eax*4]
 	push	eax
-.rgb2.innloop1:
-	push	edi
-	mov	ecx, ebx
-.rgb2.innloop2:
-	mov	eax, [esi]
+; do not read a whole dword: the last pixel of the unpacked data may end
+; exactly at a page boundary, and the byte after it may be unmapped
+	movzx	eax, word [esi]
 	bswap	eax
+	mov	ah, [esi+2]
 	mov	al, 0xff
 	ror	eax, 8
 	cmp	eax, [.transparent_color]
 	jnz	@f
 	and	eax, 0x00ffffff
 @@:
+.rgb2.innloop1:
+	push	edi
+	mov	ecx, ebx
+.rgb2.innloop2:
 	stosd
 	dec	ecx
 	jnz	.rgb2.innloop2
@@ -966,8 +969,9 @@ local .l1
 	mov	[.i], ecx
 .rgb2_16bit.extloop:
 	init_block
-	lea	eax, [eax*3]
-	add	eax, edi
+; the image was created as Image.bpp32 (see .ihdr), so write 4 bytes per pixel,
+; not 3: with 3-byte stores rows drift and the last quarter of the image stays empty
+	lea	eax, [edi+eax*4]
 	push	eax
 .rgb2_16bit.innloop1:
 	push	edi
@@ -982,7 +986,8 @@ local .l1
 	mov	ax, [esi]
 	convert_16_to_8
 	mov	[edi+2], al
-	add	edi, 3
+	mov	byte [edi+3], 0xff
+	add	edi, 4
 	dec	ecx
 	jnz	.rgb2_16bit.innloop2
 	pop	edi

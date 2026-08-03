@@ -1,0 +1,89 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# SPDX-FileCopyrightText: 2026 KolibriOS team
+
+name: 'Update submodules'
+
+on:
+  schedule:
+    - cron: '0 * * * *'      # hourly
+  workflow_dispatch:
+
+jobs:
+  bump:
+    name: 'Bump ${{ matrix.name }} to upstream'
+    runs-on: kolibri-toolchain
+    permissions:
+      contents: write
+      pull-requests: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: cmm
+            path: programs/develop/cmm
+          - name: oberon07
+            path: programs/develop/oberon07
+          - name: cmm_apps
+            path: programs/cmm
+          - name: kterm
+            path: programs/other/kterm
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+          token: ${{ secrets.BOT_TOKEN }}
+
+      - name: Bump ${{ matrix.name }} and open PR
+        env:
+          TOKEN: ${{ secrets.BOT_TOKEN }}
+          API: ${{ github.api_url }}
+          REPO: ${{ github.repository }}
+          NAME: ${{ matrix.name }}
+          PATH_: ${{ matrix.path }}
+          BRANCH: chore/update-${{ matrix.name }}
+        run: |
+          set -euo pipefail
+
+          git submodule update --remote "$PATH_"
+
+          # look only at this submodule: the other jobs in the matrix are
+          # bumping their own, and the rest of the tree is none of our business
+          if git diff --quiet -- "$PATH_"; then
+            echo "$NAME is already up to date"
+            exit 0
+          fi
+
+          WANT=$(git -C "$PATH_" rev-parse HEAD)
+
+          # skip revisions that already have PR opened
+          if git fetch -q origin "$BRANCH" 2>/dev/null; then
+            HAVE=$(git rev-parse "FETCH_HEAD:$PATH_" 2>/dev/null || echo none)
+            if [ "$HAVE" = "$WANT" ]; then
+              echo "$NAME bump to $WANT is already waiting in $BRANCH"
+              exit 0
+            fi
+          fi
+
+          git config user.name  "kolibri-bot"
+          git config user.email "bot@kolibrios.org"
+          git checkout -B "$BRANCH"
+          git commit -m "chore/submodules: bump $NAME to $WANT" -- "$PATH_"
+          git push -f origin "$BRANCH"
+
+          # Open a PR via the Gitea API.
+          # 201 = created, 409 = a PR for this branch is already open (the
+          # force-push above already updated it) - both are fine.
+          http=$(curl -sS -o /tmp/pr.json -w '%{http_code}' -X POST \
+            -H "Authorization: token ${TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "{\"head\":\"${BRANCH}\",\"base\":\"main\",\"title\":\"chore/submodules: bump ${NAME} to upstream\"}" \
+            "${API}/repos/${REPO}/pulls")
+          echo "PR API HTTP status: $http"
+          cat /tmp/pr.json; echo
+          if [ "$http" != "201" ] && [ "$http" != "409" ]; then
+            echo "Failed to create pull request"
+            exit 1
+          fi

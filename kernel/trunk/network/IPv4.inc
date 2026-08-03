@@ -1,6 +1,6 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;                                                                 ;;
-;; Copyright (C) KolibriOS team 2004-2024. All rights reserved.    ;;
+;; Copyright (C) KolibriOS team 2004-2026. All rights reserved.    ;;
 ;; Distributed under terms of the GNU General Public License       ;;
 ;;                                                                 ;;
 ;;  IPv4.INC                                                       ;;
@@ -194,7 +194,7 @@ macro ipv4_checksum ptr {
         pop     ecx
 
         neg     word [ptr+10]           ; zero will stay zero so we just get the checksum
-        add     word [ptr+10], bx       ;  , else we will get (new checksum - old checksum) in the end, wich should be 0 :)
+        add     word [ptr+10], bx       ;  , else we will get (new checksum - old checksum) in the end, which should be 0 :)
         pop     ebx
 
 }
@@ -276,7 +276,7 @@ ipv4_input:
 ; Check if the packet is fragmented
 
         test    [edx + IPv4_header.FlagsAndFragmentOffset], 1 shl 5     ; Is 'more fragments' flag set ?
-        jnz     .has_fragments                                          ; If so, we definately have a fragmented packet
+        jnz     .has_fragments                                          ; If so, we definitely have a fragmented packet
 
         test    [edx + IPv4_header.FlagsAndFragmentOffset], 0xff1f      ; If flag is not set, but there is a fragment offset, the packet is last in series of fragmented packets
         jnz     .is_last_fragment
@@ -284,7 +284,7 @@ ipv4_input:
 ;-------------------------------------------------------------------
 ; No, it's just a regular IP packet, pass it to the higher protocols
 
-  .handle_it:                                                   ; We reach here if packet hasnt been fragmented, or when it already has been re-constructed
+  .handle_it:                                                   ; We reach here if packet hasn't been fragmented, or when it already has been re-constructed
 
         movzx   esi, [edx + IPv4_header.VersionAndIHL]          ; Calculate Header length by using IHL field
         and     esi, 0x0000000f                                 ;
@@ -482,7 +482,7 @@ ipv4_input:
         mov     [esi + sizeof.NET_BUFF + IPv4_FRAGMENT_entry.PrevPtr], edi
         mov     [esi + sizeof.NET_BUFF + IPv4_FRAGMENT_entry.Owner], ebx
 
-        mov     cx, [edx + IPv4_header.TotalLength]                                     ; Note: This time we don't substract Header length
+        mov     cx, [edx + IPv4_header.TotalLength]                                     ; Note: This time we don't subtract Header length
         xchg    cl, ch
         DEBUGF  DEBUG_NETWORK_VERBOSE, "IPv4_input: Packet size=%u\n", cx
         add     ax, cx
@@ -543,11 +543,11 @@ ipv4_input:
         rep movsb                                                                       ;
 
         push    eax
-        push    [edx + sizeof.NET_BUFF + IPv4_FRAGMENT_entry.Owner]                                       ; we need to remeber the owner, in case this is the last packet
-        push    [edx + sizeof.NET_BUFF + IPv4_FRAGMENT_entry.NextPtr]                                     ; Set edx to the next pointer
+        push    [edx + sizeof.NET_BUFF + IPv4_FRAGMENT_entry.Owner]                     ; we need to remember the owner, in case this is the last packet
+        push    [edx + sizeof.NET_BUFF + IPv4_FRAGMENT_entry.NextPtr]                   ; Set edx to the next pointer
         push    edx                                                                     ; Push pointer to fragment onto stack
         DEBUGF  DEBUG_NETWORK_VERBOSE, "IPv4_input: Next Fragment: 0x%x\n", edx
-        call    net_buff_free                                                          ; free the previous fragment buffer (this uses the value from stack)
+        call    net_buff_free                                                           ; free the previous fragment buffer (this uses the value from stack)
         pop     edx ebx eax
         cmp     edx, -1                                                                 ; Check if it is last fragment in chain
         jne     .rebuild_packet_loop
@@ -765,9 +765,9 @@ ipv4_output_raw:
         push    ebx                     ; push the mac
         push    ax
 
-        inc     [IPv4_packets_tx + 4*edi]
+        inc     [IPv4_packets_tx + edi]
         mov     ax, ETHER_PROTO_IPv4
-        mov     ebx, [net_device_list + 4*edi]
+        mov     ebx, [net_device_list + edi]
         mov     ecx, [esp + 6 + 4]
         add     ecx, sizeof.IPv4_header
         mov     edx, esp
@@ -951,7 +951,7 @@ endp
 ;       edi = device number*4                                     ;
 ;                                                                 ;
 ; DESTROYED:                                                      ;
-;       ecx                                                       ;
+;       ebx, ecx                                                  ;
 ;                                                                 ;
 ;-----------------------------------------------------------------;
 align 4
@@ -964,6 +964,7 @@ ipv4_route:
         cmp     eax, 0xffffffff
         je      .broadcast
 
+; Check for on-link
         xor     edi, edi
   .loop:
         mov     ebx, [IPv4_address + edi]
@@ -978,9 +979,55 @@ ipv4_route:
         cmp     edi, 4*NET_DEVICES_MAX
         jb      .loop
 
-        mov     eax, [IPv4_gateway + 4]         ; TODO: let user (or a user space daemon) configure default route
+; no on-link match, find first device with a gateway
+        mov     edi, 4                  ; skip loopback device
+  .loop_gw:
+        cmp     [IPv4_gateway + edi], 0
+        jne     .found_gw
+        add     edi, 4
+        cmp     edi, 4*NET_DEVICES_MAX
+        jb      .loop_gw
+        jmp     .loopback               ; no gateway found, fall-back to loopback device
+
+  .found_gw:
+        mov     eax, [IPv4_gateway + edi]
+        jmp     .got_it
+
   .broadcast:
-        mov     edi, 4                          ; TODO: same as above
+; broadcast: we will do our best without full routing..
+
+; find the first non loopback device which has an active link without IP address
+        mov     edi, 4                  ; skip loopback device
+  .bc_loop1:
+        mov     ebx, [net_device_list + edi]
+        test    ebx, ebx
+        jz      @f
+        cmp     [ebx + NET_DEVICE.link_state], 0
+        je      @f
+        cmp     [IPv4_address + edi], 0
+        je      .got_it
+  @@:
+        add     edi, 4
+        cmp     edi, 4*NET_DEVICES_MAX
+        jb      .bc_loop1
+
+; If there is no such device, try the one with active link and IP address
+        mov     edi, 4                  ; skip loopback device
+  .bc_loop2:
+        mov     ebx, [net_device_list + edi]
+        test    ebx, ebx
+        jz      @f
+        cmp     [ebx + NET_DEVICE.link_state], 0
+        jne     .got_it
+  @@:
+        add     edi, 4
+        cmp     edi, 4*NET_DEVICES_MAX
+        jb      .bc_loop2
+;        jmp     .loopback               ; no gateway found, fall-back to loopback device
+
+  .loopback:
+        xor     edi, edi                ; nowhere to go for now.. route it to the loopback device
+
   .got_it:
         DEBUGF  DEBUG_NETWORK_VERBOSE, "IPv4_route: %u\n", edi
         test    edx, edx

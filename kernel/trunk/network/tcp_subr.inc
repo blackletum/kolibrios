@@ -320,12 +320,12 @@ tcp_respond:
         stosb
         mov     eax, SOCKET_BUFFER_SIZE
         sub     eax, [esi + STREAM_SOCKET.rcv.size]
-        cmp     eax, TCP_max_win
+        mov     cl, [esi + TCP_SOCKET.RCV_SCALE]
+        shr     eax, cl                 ; scale first, then clamp to the
+        cmp     eax, TCP_max_win        ; 16-bit field maximum
         jbe     .lessthanmax
         mov     eax, TCP_max_win
   .lessthanmax:
-        mov     cl, [esi + TCP_SOCKET.RCV_SCALE]
-        shr     eax, cl
 
         xchg    al, ah
         stosw                   ; window
@@ -485,10 +485,10 @@ tcp_set_persist:
         mov     cl, [eax + TCP_SOCKET.t_rxtshift]
         shl     ebx, cl
 
-; Start/restart persistance timer.
+; Start/restart persistence timer.
 
         tcpt_rangeset [eax + TCP_SOCKET.timer_persist], ebx, TCP_time_pers_min, TCP_time_pers_max
-        or      [ebx + TCP_SOCKET.timer_flags], timer_flag_persist
+        or      [eax + TCP_SOCKET.timer_flags], timer_flag_persist
         pop     ebx
 
         cmp     [eax + TCP_SOCKET.t_rxtshift], TCP_max_rxtshift
@@ -615,4 +615,3 @@ tcp_reassemble:
         ;;;;; TODO
 
         ret
-

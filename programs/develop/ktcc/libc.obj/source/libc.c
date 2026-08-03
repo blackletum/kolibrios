@@ -57,6 +57,8 @@
 #include "stdio/vfprintf.c"
 #include "stdio/vprintf.c"
 #include "stdio/vsnprintf.c"
+/* strntold() is used by vsscanf() below; include its definition first */
+#include "stdlib/strntold.c"
 #include "stdio/vsscanf.c"
 
 #include "string/memccpy.c"
@@ -102,6 +104,8 @@
 #include "stdlib/rand.c"
 #include "stdlib/realloc.c"
 #include "stdlib/strtod.c"
+#include "stdlib/strtof.c"
+#include "stdlib/strtold.c"
 #include "stdlib/strtol.c"
 
 #include "math/acosh.c"
@@ -119,6 +123,7 @@
 #include "time/localtime.c"
 #include "time/mktime.c"
 #include "time/time.c"
+#include "time/strftime.c"
 
 #include "misc/basename.c"
 #include "misc/dirname.c"
@@ -188,6 +193,8 @@ ksys_dll_t EXPORTS[] = {
     { "rand", &rand },
     { "qsort", &qsort },
     { "strtod", &strtod },
+    { "strtof", &strtof },
+    { "strtold", &strtold },
     { "__assert_fail", &__assert_fail },
     { "memccpy", &memccpy},
     { "memchr", &memchr },
@@ -297,6 +304,7 @@ ksys_dll_t EXPORTS[] = {
     { "localtime", &localtime },
     { "asctime", &asctime },
     { "difftime", &difftime },
+    { "strftime", &strftime },
     { "basename", &basename },
     { "dirname", &dirname },
     NULL

@@ -1,5 +1,5 @@
 #0    **** MAIN
-58 Welcome               |welcome.htm
+58 Bienvenida            |/sys/welcome.htm
 00 2D Demos           >  |@1
 00 3D Demos           >  |@2
 00 Gr ficos           >  |@3
@@ -118,12 +118,14 @@
 16 Cliente Synergy       |network/synergyc
 16 Resoluci¢n de nombres |network/nslookup
 16 VNC Viewer            |network/vncc
-16 Cliente de descarga   |network/downloader
-16 Navegador (modo texto)|network/webview
+16 HTTPGet               |network/httpget
+16 Descargas             |network/dl
+16 Navegador WebView     |network/webview
 #15    **** OTROS
 16 Reloj anal¢gico       |demos/aclock
 16 Reloj binario         |demos/bcdclk
 16 Contador              |demos/timer
+18 FB2 Reader            |fb2read
 16 Capturar de pantalla  |scrshoot
 16 Calendario            |calendar
 16 Lector de RTF         |rtfread
