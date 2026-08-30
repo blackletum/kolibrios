@@ -190,14 +190,15 @@ jobs:
           for ext in img iso raw; do
             cp "build-${{ matrix.lang }}/data/kolibri.$ext" "$BASE.$ext"
           done
-          tar -C "build-${{ matrix.lang }}/data" -czf "$BASE.distr.tar.gz" distribution_kit
+          # zip: distr targets Windows/DOS users, Explorer opens it natively
+          (cd "build-${{ matrix.lang }}/data" && zip -r -9 -q "${{ gitea.workspace }}/$BASE.distr.zip" distribution_kit)
           # whole build tree for per-program downloads; the big images ship separately
           tar -C "build-${{ matrix.lang }}" \
               --exclude './data/kolibri.iso' \
               --exclude './data/kolibri.raw' \
               --exclude './data/distribution_kit' \
               -czf "$BASE.tree.tar.gz" .
-          sha256sum "$BASE".img "$BASE".iso "$BASE".raw "$BASE".distr.tar.gz > "$BASE.sha256sums.txt"
+          sha256sum "$BASE".img "$BASE".iso "$BASE".raw "$BASE".distr.zip > "$BASE.sha256sums.txt"
           mv build.log "$BASE.build.log"
 
       # publish the images; longer retention for the floppy image
@@ -225,8 +226,8 @@ jobs:
       - name: Upload distribution kit
         uses: actions/upload-artifact@v3
         with:
-          name: kolibrios-${{ steps.vars.outputs.descr }}-${{ matrix.lang }}.distr.tar.gz
-          path: kolibrios-${{ steps.vars.outputs.descr }}-${{ matrix.lang }}.distr.tar.gz
+          name: kolibrios-${{ steps.vars.outputs.descr }}-${{ matrix.lang }}.distr.zip
+          path: kolibrios-${{ steps.vars.outputs.descr }}-${{ matrix.lang }}.distr.zip
           retention-days: 30
 
       - name: Upload checksums
@@ -281,7 +282,7 @@ jobs:
             fname="$(basename "$file")"        # kolibrios-<descr>-<lang>.<suffix>
             case "$fname" in
               *.tree.tar.gz)    stem="${fname%.tree.tar.gz}";;
-              *.distr.tar.gz)   stem="${fname%.distr.tar.gz}";;
+              *.distr.zip)      stem="${fname%.distr.zip}";;
               *.sha256sums.txt) stem="${fname%.sha256sums.txt}";;
               *.build.log)      stem="${fname%.build.log}";;
               *.img)            stem="${fname%.img}";;
