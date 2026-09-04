@@ -202,6 +202,8 @@ mainloop:
         mov     bh, byte[ebp + interface.number]
         mov     bl, 7
         mcall   76                      ; Number of IP conflicts
+        cmp     eax, -1
+        je      @f
         cmp     eax, [ebp + interface.ip_conflicts]
         je      @f
         mov     [ebp + interface.ip_conflicts], eax
@@ -215,8 +217,8 @@ mainloop:
         mov     bh, byte[ebp + interface.number]
         mov     bl, 0                   ; Get device type
         mcall   74
-        test    eax, eax                ; No device
-        jz      .link_down
+        cmp     eax, 1
+        jne     .link_down
 
 ; Check if link is still there
         mov     bl, 10                  ; Get Link status
