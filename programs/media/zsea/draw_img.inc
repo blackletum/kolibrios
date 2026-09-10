@@ -422,7 +422,7 @@ draw_scrollbars:
 	cmp   [scroll_bar_data_vertical.cur_area],0
 	je   @f
 	push    dword scroll_bar_data_vertical
-	call    [scrollbar_ver_draw]
+	call    [scrollbar_v_draw]
 ;    draw_scroll_bar_vertical scroll_bar_data_vertical
 	inc  [draw_scrollbar_counter]
 @@:
@@ -435,7 +435,7 @@ draw_scrollbars:
 	cmp   [scroll_bar_data_horizontal.cur_area],0
 	je   @f
 	push    dword scroll_bar_data_horizontal
-	call    [scrollbar_hor_draw]
+	call    [scrollbar_h_draw]
 ;    draw_scroll_bar_horizontal scroll_bar_data_horizontal
 	inc  [draw_scrollbar_counter]
 @@:

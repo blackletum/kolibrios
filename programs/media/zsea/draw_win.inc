@@ -32,35 +32,35 @@ draw_window:
 	call	[menu_bar_draw]
 
 	push	dword dinamic_button_data_1
-	call	[dinamic_button_draw]
+	call	[dbutton_draw]
 	push	dword dinamic_button_data_2
-	call	[dinamic_button_draw]
+	call	[dbutton_draw]
 	push	dword dinamic_button_data_3
-	call	[dinamic_button_draw]
+	call	[dbutton_draw]
 	push	dword dinamic_button_data_4
-	call	[dinamic_button_draw]
+	call	[dbutton_draw]
 	push	dword dinamic_button_data_5
-	call	[dinamic_button_draw]
+	call	[dbutton_draw]
 	push	dword dinamic_button_data_6
-	call	[dinamic_button_draw]
+	call	[dbutton_draw]
 	push	dword dinamic_button_data_7
-	call	[dinamic_button_draw]
+	call	[dbutton_draw]
 	push	dword dinamic_button_data_8
-	call	[dinamic_button_draw]
+	call	[dbutton_draw]
 	push	dword dinamic_button_data_9
-	call	[dinamic_button_draw]
+	call	[dbutton_draw]
 	push	dword dinamic_button_data_10
-	call	[dinamic_button_draw]
+	call	[dbutton_draw]
 	push	dword dinamic_button_data_11
-	call	[dinamic_button_draw]
+	call	[dbutton_draw]
 	push	dword dinamic_button_data_12
-	call	[dinamic_button_draw]
+	call	[dbutton_draw]
 	push	dword dinamic_button_data_13
-	call	[dinamic_button_draw]
+	call	[dbutton_draw]
 	push	dword dinamic_button_data_14
-	call	[dinamic_button_draw]
+	call	[dbutton_draw]
 	push	dword dinamic_button_data_15
-	call	[dinamic_button_draw]
+	call	[dbutton_draw]
 	
 	mcall	13,<225,2>,<3,22>,0x677EA0 ;0x052B64
 	mcall	,<280,2>
