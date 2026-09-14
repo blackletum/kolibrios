@@ -5,7 +5,7 @@ draw_menu_bar:
     mov   ebx,[window_width]
     sub   ebx,9
     add   ebx,5 shl 16
-    mcall 13,,,0xcccccc
+    mcall SF_DRAW_RECT, ,,0xcccccc
     add   ecx,37 shl 16
     mov   cx,3
     mcall
@@ -25,7 +25,7 @@ draw_menu_bar:
     add   ecx,eax
     mov   bx,2
     sub   ecx,33
-    mcall 13
+    mcall SF_DRAW_RECT
     push  ebx
     ror   ebx,16
     mov   bx,[right_panel_x.start_x]
@@ -45,7 +45,7 @@ draw_menu_bar:
     mov   eax,[window_width] 
     mov   bx,ax
     sub   ebx,9
-    mcall 13
+    mcall SF_DRAW_RECT
     add   ecx,15 shl 16
     mcall
     ret

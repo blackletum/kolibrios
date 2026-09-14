@@ -143,12 +143,10 @@ check_scroll_bar_left_event:
      jmp   .all
 ;---------------------------------------------------------------------
 draw_all_panels_for_scroll_bar:
-     push eax
-     push ebx
+     push eax ebx
      call draw_right_panel
      call draw_left_panel
-     pop  ebx
-     pop  eax
+     pop  ebx eax
      ret
 ;---------------------------------------------------------------------
 calculate_for_scroll_bar:
@@ -397,20 +395,6 @@ calculate_for_draw_scroll_bar_3:
      mov   [draw_scroll_character],3
      call  draw_scroll_bar_srectangle
      ret
-;---------------------------------------------------------------------
-;calculate_for_draw_scroll_bar_4:
-;     push  eax
-;     push  ebx
-;;     shr   eax,10
-;     mov   ebx,eax
-;     xor   eax,eax
-;     mov   ax,[left_panel_y.size_y]
-;     xor   edx,edx
-;     div   ebx
-;;     mov   esi,eax
-;     pop   ebx
-;     pop   eax
-;     ret
 ;---------------------------------------------------------------------
 draw_scroll_bar_srectangle:
      push  ecx

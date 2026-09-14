@@ -152,7 +152,6 @@ error_pointer rd 1
 file_system_error rd 1
 end_tag rd 1
 icons_end_tag rd 1
-exit_to_dir rb 1
 exit_dir rb 1
 use_patch rb 1
 ;---------------------------------------------------------------------
@@ -161,8 +160,13 @@ appl_memory rd 1
 appl_memory_old rd 1
 buttons_img_start rd 1
 ini_file_start rd 1
+ini_size rd 1
 left_folder_data rd 1
+lfd_size rd 1
 right_folder_data rd 1
+rfd_size rd 1
+tmp_memory rd 1
+tm_size rd 1
 ;---------------------------------------------------------------------
 shift_flag rb 1
 ctrl_flag  rb 1

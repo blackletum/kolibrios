@@ -201,12 +201,6 @@ mouse_key_delay dd 100
 copy_editboxes:
 create_editboxes:
 edit1 edit_box 150,10,10,0xffffff,0xbbddff,0,0,0,255,create_dir_name,ed_focus+ed_always_focus,0
-copy_editboxes_end:
-create_editboxes_end:
-;---------------------------------------------------------------------
-;copy_editboxes:
-;edit2 edit_box 150,10,10,0xffffff,0,0,0,0,255,create_dir_name,ed_focus,0
-;copy_editboxes_end:
 ;---------------------------------------------------------------------
 align 4
 sysopen:

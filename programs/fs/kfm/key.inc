@@ -1,5 +1,5 @@
 key:
-    mcall 2
+    mcall SF_GET_KEY
     cmp   [extended_key],1
     je    .extended_key
     test  al, al
