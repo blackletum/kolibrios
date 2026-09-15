@@ -165,7 +165,7 @@ exc_c:                            ; exceptions (all but 7th - #NM)
         jnz     IRetToUserHook
   @@:
         cli
-        mov     eax, [esi + APPDATA.debugger_slot]
+        mov     eax, [esi + APPDATA.debugger_thread]
         test    eax, eax
         jnz     .debug
 ; not debuggee => say error and terminate
@@ -514,28 +514,30 @@ destroy_thread:
 @@:
         mov     eax, [esi + APPOBJ.fd]
         test    eax, eax
-        jz      @F
+        jz      @f
 
         cmp     eax, esi
-        je      @F
+        je      @f
 
         push    esi
         call    [eax + APPOBJ.destroy]
            DEBUGF 1,"%s",msg_obj_destroy
         pop     esi
-        jmp     @B
+        jmp     @b
 @@:
         mov     esi, [.slot]
+        shl     esi, BSF sizeof.APPDATA
+        add     esi, SLOT_BASE
         cmp     [fpu_owner], esi ; if user fpu last -> fpu user = 2
-        jne     @F
+        jne     @f
 
-        mov     [fpu_owner], 2
-        mov     eax, [SLOT_BASE + sizeof.APPDATA*2 + APPDATA.fpu_state]
+        mov     [fpu_owner], APPDATA_OS_THREAD
+        mov     eax, [APPDATA_OS_THREAD + APPDATA.fpu_state]
         clts
         bt      [cpu_caps], CAPS_SSE
         jnc     .no_SSE
         fxrstor [eax]
-        jmp     @F
+        jmp     @f
 .no_SSE:
         fnclex
         frstor  [eax]
@@ -544,8 +546,8 @@ destroy_thread:
         mov     [KEY_COUNT], byte 0    ; empty keyboard buffer
         mov     [BTN_COUNT], byte 0    ; empty button buffer
 
-
 ; remove defined hotkeys
+        mov     esi, [.slot]
         mov     eax, hotkey_list
 .loop:
         cmp     [eax+8], esi
@@ -638,7 +640,7 @@ destroy_thread:
         pushad
         mov     edi, esi
         shl     edi, BSF sizeof.APPDATA
-        mov     eax, [SLOT_BASE + edi + APPDATA.debugger_slot]
+        mov     eax, [SLOT_BASE + edi + APPDATA.debugger_thread]
         test    eax, eax
         jz      .nodebug
         movi    ecx, 8
@@ -666,12 +668,12 @@ destroy_thread:
         add     edi, SLOT_BASE
 
         mov     eax, [edi + APPDATA.io_map]
-        cmp     eax, [SLOT_BASE + sizeof.APPDATA+APPDATA.io_map]
+        cmp     eax, [APPDATA_IDLE_THREAD + APPDATA.io_map]
         je      @F
         call    free_page
 @@:
         mov     eax, [edi+APPDATA.io_map+4]
-        cmp     eax, [SLOT_BASE+sizeof.APPDATA+APPDATA.io_map+4]
+        cmp     eax, [APPDATA_IDLE_THREAD + APPDATA.io_map+4]
         je      @F
         call    free_page
 @@:
@@ -712,12 +714,12 @@ destroy_thread:
         call    free_cd_channel
         and     [cd_status], 0
 @@:
-        pop     esi
         cmp     [bgrlockpid], esi
         jnz     @f
         and     [bgrlockpid], 0
         and     [bgrlock], 0
 @@:
+        pop     esi
 
         pusha                 ; remove all port reservations
         mov     edx, esi
@@ -778,14 +780,15 @@ destroy_thread:
 
         mov     edi, esi ; do not run this process slot
         shl     edi, BSF sizeof.APPDATA
-        mov     [SLOT_BASE + edi + APPDATA.state], TSTATE_FREE
+        add     edi, SLOT_BASE
+        mov     [edi + APPDATA.state], TSTATE_FREE
 ; debugger test - terminate all debuggees
         mov     eax, 2
-        mov     ecx, SLOT_BASE + 2*sizeof.APPDATA + APPDATA.debugger_slot
+        mov     ecx, APPDATA_OS_THREAD + APPDATA.debugger_thread
 .xd0:
         cmp     eax, [thread_count]
         ja      .xd1
-        cmp     dword [ecx], esi
+        cmp     dword [ecx], edi
         jnz     @f
         and     dword [ecx], 0
         pushad
