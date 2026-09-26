@@ -55,7 +55,6 @@ img_files = {
  {"SETTINGS/HA.CFG", SRC_PROGS .. "/other/ha/SETTINGS/HA.CFG"},
  {"SETTINGS/ICON.INI", build_type .. "/settings/icon.ini"},
  {"SETTINGS/KEYMAP.KEY", SRC_PROGS .. "/system/taskbar/KEYMAP.KEY"},
- {"SETTINGS/KOLIBRI.LBL", build_type .. "/settings/kolibri.lbl"},
  {"SETTINGS/LANG.INI", build_type .. "/settings/lang.ini"},
  {"SETTINGS/MENU.DAT", build_type .. "/settings/menu.dat"},
  {"SETTINGS/NETWORK.INI", "common/settings/network.ini"},
