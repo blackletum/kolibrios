@@ -667,7 +667,7 @@ if build_type == "ru_RU" then tup.append_table(extra_files, {
  {"kolibrios/games/Dungeons/Dungeons", VAR_PROGS .. "/games/Dungeons/Dungeons"},
  {"kolibrios/games/klavisha/klavisha", VAR_PROGS .. "/games/klavisha/klavisha"},
  {"kolibrios/games/klavisha/basekurs.kla", "ru_RU/games/basekurs.kla"},
-}) else tup.append_table(img_files, {
+}) else tup.append_table(extra_files, {
  {"kolibrios/develop/examples/testcon2", VAR_PROGS .. "/develop/libraries/console_coff/examples/testcon2_eng"},
 }) end
 
