@@ -691,6 +691,7 @@ init_rx_ring:
         mov     [esi + sizeof.NET_BUFF + rxfd.command], RXFD_CMD_EL or RXFD_CMD_SUSPEND
         mov     [esi + sizeof.NET_BUFF + rxfd.link], eax
         mov     [esi + sizeof.NET_BUFF + rxfd.count], 0
+        mov     [esi + sizeof.NET_BUFF + rxfd.rx_buf_addr], 0xffffffff  ; simplified mode, no RBD
         mov     [esi + sizeof.NET_BUFF + rxfd.size], 1528
 
         ret
@@ -856,7 +857,7 @@ int_handler:
 
         DEBUGF  1,"Status: %x\n", ax
 
-        test    ax, SCB_STATUS_FR               ; did we receive a frame?
+        test    ax, SCB_STATUS_FR or SCB_STATUS_RNR     ; frame received or receiver stopped?
         jz      .no_rx
 
         push    ax
@@ -903,6 +904,7 @@ int_handler:
         mov     [esi + sizeof.NET_BUFF + rxfd.command], RXFD_CMD_EL or RXFD_CMD_SUSPEND
         mov     [esi + sizeof.NET_BUFF + rxfd.link], eax
         mov     [esi + sizeof.NET_BUFF + rxfd.count], 0
+        mov     [esi + sizeof.NET_BUFF + rxfd.rx_buf_addr], 0xffffffff  ; simplified mode, no RBD
         mov     [esi + sizeof.NET_BUFF + rxfd.size], 1528
 
 ; restart RX
@@ -918,10 +920,15 @@ int_handler:
         mov     ax, RX_START
         out     dx, ax
         call    cmd_wait
-  .out_of_mem:
 
 ; Hand the frame over to the kernel
         jmp     [EthInput]
+
+  .out_of_mem:
+; The buffer is still our only RFD: drop the frame and reuse it
+        add     esp, 12                         ; buffer, .rx_loop, ebx
+        mov     esi, [ebx + device.rx_desc]
+        jmp     .not_ok
 
   .not_ok:
 ; Reset the FD
@@ -947,6 +954,27 @@ int_handler:
 
   .no_rx_:
         DEBUGF  1, "no more data\n"
+
+; With a single RFD the receiver sits in No Resources/Suspended whenever a
+; frame arrived before we re-armed it. Nothing restarts it but us.
+        set_io  [ebx + device.io_addr], 0
+        set_io  [ebx + device.io_addr], REG_SCB_STATUS
+        in      al, dx
+        and     al, SCB_STATUS_RUS
+        cmp     al, RU_STATUS_READY
+        je      .ru_ready
+        test    byte[esp], 1                    ; bit 0 of the saved status is reserved,
+        jnz     .ru_ready                       ; we mark it: one restart per IRQ
+        or      byte[esp], 1
+        movzx   eax, al
+        DEBUGF  2, "Restarting receiver, RU status %x\n", eax:2
+        mov     esi, [ebx + device.rx_desc]
+        push    ebx
+        test    [esi + sizeof.NET_BUFF + rxfd.status], RXFD_STATUS_C
+        jnz     .rx_loop                        ; a frame completed meanwhile
+        add     esp, 4
+        jmp     .not_ok                         ; re-arm the empty RFD
+  .ru_ready:
         pop     ax
 
   .no_rx:
