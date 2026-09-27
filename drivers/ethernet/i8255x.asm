@@ -130,6 +130,8 @@ RU_STATUS_IDLE          = 0000b shl 2
 RU_STATUS_SUSPENDED     = 0001b shl 2
 RU_STATUS_NO_RESOURCES  = 0010b shl 2
 RU_STATUS_READY         = 0100b shl 2
+SCB_STATUS_CUS          = 11000000b     ; CU Status
+CU_STATUS_ACTIVE        = 10b shl 6
 SCB_STATUS_FCP          = 1 shl 8       ; Flow Control Pause
 SCB_STATUS_SWI          = 1 shl 10      ; Software Interrupt
 SCB_STATUS_MDI          = 1 shl 11      ; MDI read/write complete
@@ -630,6 +632,9 @@ reset:
         mov     ax, CU_START or INT_MASK
         out     dx, ax
         call    cmd_wait
+; cmd_wait only means the SCB accepted the command. The Configure below
+; reuses confcmd, so a slow chip would read it instead of our MAC.
+        call    confcmd_wait
 
 ;-------------
 ; Configure CU
@@ -654,6 +659,7 @@ reset:
         mov     ax, CU_START                            ; expect Interrupts from now on
         out     dx, ax
         call    cmd_wait
+        call    confcmd_wait
 
 ; Start media check timer
         mov     [ebx + device.state], ETH_LINK_DOWN
@@ -789,6 +795,22 @@ proc transmit stdcall bufferptr
         mov     eax, edi
         invoke  GetPhysAddr
         set_io  [ebx + device.io_addr], 0
+
+        ; CU_START is only valid while the CU is idle or suspended:
+        ; wait for the previous frame to leave (1.2 ms at 10 Mbit)
+        push    eax ecx
+        set_io  [ebx + device.io_addr], REG_SCB_STATUS
+        mov     ecx, 100000
+  .cu_busy:
+        in      al, dx
+        and     al, SCB_STATUS_CUS
+        cmp     al, CU_STATUS_ACTIVE
+        jne     .cu_free
+        dec     ecx
+        jnz     .cu_busy
+        DEBUGF  2, "CU still active, starting anyway\n"
+  .cu_free:
+        pop     ecx eax
         set_io  [ebx + device.io_addr], REG_SCB_PTR
         out     dx, eax
 
@@ -1109,6 +1131,25 @@ proc check_media_mii stdcall dev:dword
 
 endp
 
+
+; Wait (up to 1 s) until the device has executed the command in confcmd.
+align 4
+confcmd_wait:
+        mov     ecx, 100
+  .loop:
+        test    [ebx + device.confcmd.status], TXFD_STATUS_C
+        jnz     .done
+        call    udelay
+        dec     ecx
+        jnz     .loop
+        movzx   eax, [ebx + device.confcmd.command]
+        DEBUGF  2, "Command 0x%x not completed\n", eax:4
+        ret
+  .done:
+        movzx   eax, [ebx + device.confcmd.command]
+        movzx   ecx, [ebx + device.confcmd.status]
+        DEBUGF  2, "Command 0x%x done, status 0x%x\n", eax:4, ecx:4
+        ret
 
 align 4
 cmd_wait:
