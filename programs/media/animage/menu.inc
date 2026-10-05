@@ -15,6 +15,8 @@ no_set:
 }
 
 init_main_menu:
+	cmp  [lib3.status_lib],0 ; test load library
+	jnz  @f
 	stdcall [kmenu_init], syscolors
 	
 	stdcall [ksubmenu_new]
@@ -110,10 +112,14 @@ init_main_menu:
 	; add 'Reflection' menu to main
 	stdcall [kmenuitem_new], KMENUITEM_SUBMENU, sz_main_menu_Filters, [main_menu_filters]
 	stdcall [ksubmenu_add], [main_menu], eax
+@@:
 	ret
 
 put_main_menu:
+	cmp  [lib3.status_lib],0 ; test load library
+	jnz  @f
 	stdcall [kmainmenu_draw], [main_menu]
+@@:
 ret
 
 button_handler_main_menu:
@@ -145,11 +151,13 @@ button_handler_main_menu:
 .end_handler:
 ret
 
+align 4
 main_menu dd 0
 main_menu_file  dd 0
 main_menu_edit dd 0
 main_menu_instr dd 0
 main_menu_filters dd 0
+m_lost db 0
 
 sz_main_menu_File        db 'File', 0
 sz_main_menu_File_New    db 'New', 0
