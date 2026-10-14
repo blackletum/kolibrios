@@ -1,10 +1,6 @@
 { pkgs ? import <nixpkgs> {} }:
 
 let
-  revisionId = pkgs.writeShellScriptBin "get-current-cmtid" ''
-    git -C "''${ROOT:-.}" rev-parse --short HEAD
-  '';
-
   clink = pkgs.stdenvNoCC.mkDerivation {
     pname = "clink";
     version = "unstable";
@@ -151,8 +147,15 @@ let
     libmpc
     isl
     zlib
-    cl
-  ] ++ [ clink cmm jwasm211 kolibrios-toolchain kpack kos32Tcc objconv revisionId ];
+  ] ++ [
+    clink
+    cmm
+    jwasm211
+    kolibrios-toolchain
+    kpack
+    kos32Tcc
+    objconv
+  ];
 in
 pkgs.mkShell {
   packages = nativePackages;
