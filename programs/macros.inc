@@ -184,11 +184,27 @@ struc mls [sstring]
 
 
 ; strings
+
+; Count UTF-8 code points; assign the public result once for forward references.
+macro utf8_len result, start, bytes {
+ local ..i, ..b, ..count
+ ..count = 0
+ repeat bytes
+  ..i = % - 1
+  load ..b byte from start + ..i
+  if (..b and 0C0h) <> 080h
+   ..count = ..count + 1
+  end if
+ end repeat
+ result = ..count
+}
+
 macro sz name,[data] {       ; [mike.dld]
  common
   if used name
    name db data
    .size = $-name
+   utf8_len .length, name, .size
   end if
 }
 
@@ -197,6 +213,7 @@ macro szZ name,[data] {      ; same as sz, but for zero terminated string [dunka
   if used name
    name db data,0
    .size = $-name-1
+   utf8_len .length, name, .size
   end if
 }
 sz0 fix szZ
@@ -211,6 +228,7 @@ macro lsz name,[lng,data] {  ; [mike.dld]
   end if
  common
    .size = $-name
+   utf8_len .length, name, .size
   end if
 }
 
