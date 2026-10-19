@@ -185,18 +185,17 @@ struc mls [sstring]
 
 ; strings
 
-; Count UTF-8 code points; assign the public result once for forward references.
 macro utf8_len result, start, bytes {
- local ..i, ..b, ..count
- ..count = 0
+ local i, b, count
+ count = 0
  repeat bytes
-  ..i = % - 1
-  load ..b byte from start + ..i
-  if (..b and 0C0h) <> 080h
-   ..count = ..count + 1
+  i = % - 1
+  load b byte from start + i
+  if (b and 0C0h) <> 080h
+   count = count + 1
   end if
  end repeat
- result = ..count
+ result = count
 }
 
 macro sz name,[data] {       ; [mike.dld]
