@@ -12,6 +12,13 @@ The call of the system function is executed by "int 0x40" command.
 All registers except explicitly declared in the returned value,
     including eflags, are preserved.
 
+Deprecated interfaces still handled by the kernel:
+  * function 0: window styles Y=0 and Y=2 (compatibility only)
+  * function 18, subfunction 11: legacy disk subsystem information
+  * functions 21.11 and 26.11: legacy LBA access flag
+  * function 24, subfunctions 4 and 5: ATAPI tray control
+  * function 64, subfunction 1: application memory resizing
+
 
 ======================================================================
 ============== Function 0 - define and draw the window. ==============
@@ -1345,6 +1352,10 @@ Remarks:
 ======================================================================
  Function 21, subfunction 11 - enable/disable low-level access to HD.
 ======================================================================
+
+!!! WARNING. This interface is outdated and should not be used !!!
+The LBA-read system call has been removed; this flag is no longer used.
+
 Parameters:
   * eax = 21 - function number
   * ebx = 11 - subfunction number
@@ -1352,7 +1363,6 @@ Parameters:
 Returned value:
   * eax = 0
 Remarks:
-  * Is used in LBA-read (subfunction 8 of function 58).
   * The current implementation uses only low bit of ecx.
   * To get current status use subfunction 11 of function 26.
 
@@ -1609,13 +1619,16 @@ Remarks:
 ===================== Function 26, subfunction 11 ====================
 ========== Find out whether low-level HD access is enabled. ==========
 ======================================================================
+
+!!! WARNING. This interface is outdated and should not be used !!!
+The LBA-read system call has been removed; this flag is no longer used.
+
 Parameters:
   * eax = 26 - function number
   * ebx = 11 - subfunction number
 Returned value:
   * eax = 0/1 - disabled/enabled
 Remarks:
-  * Is used in LBA read (subfunction 8 of function 58).
   * To set current state use subfunction 11 of function 21.
 
 ---------------------- Constants for registers: ----------------------
@@ -2973,12 +2986,10 @@ Returned value:
   * eax = 0 - success
   * eax = 1 - not enough memory
 Remarks:
-  * There is another way to dynamically allocate/free memory -
-    subfunctions 12, 13 and 20 of function 68, but after creation
-    of the process heap 64 function call will be ignored.
-  * The function cannot be used together with 68.11, 68.12, 68.13.
-    The function call will be ignored after creation of process heap
-    with function 68.11.
+  * Use function 68 instead: subfunction 11 initializes the process
+    heap, 12 allocates, 13 frees, and 20 reallocates memory blocks.
+  * After the process heap is initialized by 68.11, calls to function
+    64 are ignored.
 
 ---------------------- Constants for registers: ----------------------
   eax - SF_MEMORY_RESIZE (64)
@@ -5513,8 +5524,6 @@ Codes of events:
   * 8 = network event (is reset at reading)
   * 9 = debug event (is reset at reading; see
     debug subsystem)
-  * 16..31 = event with appropriate IRQ
-    (16=IRQ0, 31=IRQ15) (is reset after reading all IRQ data)
 
 ======================================================================
 =================== Error codes of the file system ===================
