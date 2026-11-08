@@ -1,573 +1,541 @@
 ; SPDX-License-Identifier: NOASSERTION
 ;
-; RDsave - save the RAM-disk back to a real medium
-;
-; Modes:
-;   /sys/rdsave          window
-;   /sys/rdsave -h       silent: save to the path from the ini,
-;                        report via /sys/@notify ("h" also accepted
-;                        for compatibility with 1.x callers)
-;   /sys/rdsave <path>   silent: save to <path>, report via /sys/@notify
-;
-; The default target is the boot medium (SF 18.6 with ecx = 0) when
-; the system was booted from a floppy or a hard disk; a file picked in
-; the dialog overrides it. In the path form, "/fd/1" or "/fd/2"
-; address the floppy device (SF 16), anything else is a file (SF 18.6).
+; RDsave - save the RAM-disk to a real medium
 ;
 ; Authors: Mario79, Heavyiron, Lrz, Burer
+;
+; Offers the target of the save rule in save.inc. A file picked in the
+; dialog is a one-time target; the ini keeps it only when the kernel knows
+; no boot medium.
 
-appname equ 'RDsave '
-version equ '2.0'
+; ====================================================================
 
-use32
-org 0
+include "../../macros.inc"
 
-db 'MENUET01'
-dd 1
-dd START
-dd IM_END
-dd I_END
-dd stacktop
-dd PARAMS
-dd cur_dir_path
+format meos 01
+entry START
+stack 4096
 
-include '../../macros.inc'
-include '../../proc32.inc'
-include '../../dll.inc'
-include '../../KOSfuncs.inc'
-include '../../encoding.inc'
-include '../../string.inc'
+include "../../proc32.inc"
+include "../../dll.inc"
+include "../../KOSfuncs.inc"
+include "../../string.inc"
 
-; do_save result codes; 1..11 match the file system error codes
-SAVE_OK          = 0
-SAVE_ERR_DEV     = 11   ; floppy device write failed
-SAVE_ERR_NOPATH  = 12   ; no target path selected
-SAVE_ERR_ITSELF  = 13   ; target is on the RAM-disk
-SAVE_ERR_UNKNOWN = 14
-
-BTN_SAVE   = 2
-BTN_SELECT = 3
-
-TEXT_CP866 = 0x90000000 ; fn 4: zero-terminated, 8x16 font, CP866
-
-WIN_W    = 420
-WIN_CH   = 116  ; client area height
-LABEL_X  = 10
-VALUE_X  = 160
-BTN_Y    = 52
-STATUS_Y = 90
-
-;---------------------------------------------------------------------
+; ====================================================================
 
 START:
         mcall   SF_SYS_MISC, SSF_HEAP_INIT
+
         stdcall dll.Load, importLib
         test    eax, eax
         jnz     exit
 
         mcall   SF_SYSTEM_GET, SSF_RD_BOOT_SOURCE
         mov     [boot_src], eax
-
         invoke  ini_get_int, ini_file, ini_sec, key_autoclose, 1
         mov     [autoclose], eax
-        invoke  ini_get_str, ini_file, ini_sec, key_path, fname_buf, 4096, path_default
+        call    rd_read_path
 
-        mov     esi, PARAMS
-        mov     al, [esi]
-        test    al, al
-        jz      gui_mode
-        cmp     al, '/'
-        je      path_mode
-        cmp     word [esi], 'h'         ; bare "h": 1.x compatibility
-        je      silent_save
-        cmp     word [esi], 'H'
-        je      silent_save
-        cmp     al, '-'
-        jne     gui_mode
-        cmp     byte [esi+2], 0
-        jne     gui_mode
-        mov     al, [esi+1]
-        or      al, 0x20
-        cmp     al, 'h'
-        je      silent_save
-        jmp     gui_mode
-
-;---------------------------------------------------------------------
-
-; ZF set when fname_buf addresses the floppy device ("/fd/...")
-check_floppy_prefix:
-        mov     eax, dword [fname_buf]
-        or      eax, 0x00202000         ; the path is matched case-insensitively
-        cmp     eax, '/fd/'
-        ret
-
-; save the RAM-disk to the boot medium or to the path in fname_buf
-; out: eax = SAVE_* code
-do_save:
-        cmp     [use_boot], 0
-        je      .by_path
-        mcall   SF_SYSTEM, SSF_RD_TO_HDD, 0
-        jmp     .clamp
-
-        .by_path:
-        cmp     byte [fname_buf], 0
-        jne     @f
-        mov     eax, SAVE_ERR_NOPATH
-        ret
-
-        @@:
-        mov     eax, dword [fname_buf]
-        or      eax, 0x00202000
-        and     eax, 0x00FFFFFF
-        cmp     eax, '/rd'
-        jne     .not_rd
-        mov     al, [fname_buf+3]
-        test    al, al
-        jz      .itself
-        cmp     al, '/'
-        jne     .not_rd
-
-        .itself:
-        mov     eax, SAVE_ERR_ITSELF
-        ret
-
-        .not_rd:
-        call    check_floppy_prefix
-        jne     .file
-        mov     al, [fname_buf+4]
-        cmp     al, '1'
-        je      .flp1
-        cmp     al, '2'
-        jne     .file
-        mov     ebx, 2
-        jmp     .flp_write
-
-        .flp1:
-        mov     ebx, 1
-
-        .flp_write:
-        mcall   SF_RD_TO_FLOPPY
-        test    eax, eax
-        jz      .done
-        mov     eax, SAVE_ERR_DEV
-
-        .done:
-        ret
-
-        .file:
-        mcall   SF_SYSTEM, SSF_RD_TO_HDD, fname_buf
-
-        .clamp:
-        cmp     eax, 11
-        jbe     .done
-        mov     eax, SAVE_ERR_UNKNOWN
-        ret
-
-;---------------------------------------------------------------------
-
-path_mode:
-        stdcall string.copy, PARAMS, fname_buf
-
-silent_save:
-        call    do_save
-        stdcall string.copy, ntf_head, ntf_msg  ; string.* preserve eax
-        test    eax, eax
-        jnz     .err
-
-        stdcall string.concatenate, msg_ok, ntf_msg
-        stdcall string.concatenate, fname_buf, ntf_msg
-        mov     edx, ntf_end_ok
-        jmp     .send
-
-        .err:
-        mov     esi, [err_msgs+eax*4]
-        stdcall string.concatenate, err_prefix, ntf_msg
-        stdcall string.concatenate, esi, ntf_msg
-        mov     edx, ntf_end_err
-
-        .send:
-        stdcall string.concatenate, edx, ntf_msg
-        mcall   SF_FILE, notify_finfo
-
-exit:
-        mcall   SF_TERMINATE_PROCESS
-
-;---------------------------------------------------------------------
-
-gui_mode:
-        cmp     [boot_src], RD_LOAD_FROM_FLOPPY
-        je      .boot_target
-        cmp     [boot_src], RD_LOAD_FROM_HD
-        jne     @f
-
-        .boot_target:
-        mov     [use_boot], 1
-
-        @@:
-        stdcall string.copy, def_fname, filename_area
+        stdcall string.copy, default_name, filename_area
         push    dword OpenDialog_data
         call    [OpenDialog_Init]
 
-red:
+        call    draw_window
+
+        ; nothing to offer: ask at once
+        call    has_boot_medium
+        je      still
+        cmp     byte [fname_buf], 0
+        je      select
+        jmp     still
+
+; ====================================================================
+
+redraw:
         call    draw_window
 
 still:
         mcall   SF_WAIT_EVENT
-        dec     eax
-        jz      red
-        dec     eax
-        jz      .key
 
-        ; button event
-        mcall   SF_GET_BUTTON
-        shr     eax, 8
-        cmp     eax, 1
-        je      exit
-        cmp     eax, BTN_SAVE
-        je      gui_save
-        cmp     eax, BTN_SELECT
-        je      gui_select
+        cmp     al, EV_REDRAW
+        je      redraw
+        cmp     al, EV_KEY
+        je      key
+        cmp     al, EV_BUTTON
+        je      button
+
         jmp     still
 
-        .key:
+; ====================================================================
+
+key:
         mcall   SF_GET_KEY
-        cmp     ah, 27                  ; Esc
+
+        cmp     ah, KEY_ESC
         je      exit
-        cmp     ah, 13                  ; Enter
-        je      gui_save
+        cmp     ah, KEY_ENTER
+        je      save
+
         jmp     still
 
-gui_select:
+; ====================================================================
+
+button:
+        mcall   SF_GET_BUTTON
+
+        cmp     ah, BTN_CLOSE
+        je      exit
+        cmp     ah, BTN_SAVE
+        je      save
+        cmp     ah, BTN_SELECT
+        je      select
+        cmp     ah, BTN_FLOPPY
+        je      floppy
+
+        jmp     still
+
+exit:
+        mcall   SF_TERMINATE_PROCESS
+
+; ====================================================================
+
+select:
+        mov     [status_text], 0
+
         push    dword OpenDialog_data
         call    [OpenDialog_Start]
-        cmp     [OpenDialog_data.status], 1
-        jne     red
+
+        cmp     [OpenDialog_data.status], OPENDIALOG_OK
+        jne     redraw
+
         stdcall string.copy, dialog_path, fname_buf
-        mov     [use_boot], 0
-        jmp     red
+        mov     [picked], 1
+        jmp     redraw
 
-gui_save:
-        cmp     [use_boot], 0
-        jne     @f
-        cmp     byte [fname_buf], 0
-        je      gui_select              ; nowhere to save yet - ask for a path
+floppy:
+        call    show_saving
 
-        @@:
-        mov     esi, msg_saving
-        mov     ecx, [sc.work_text]
-        or      ecx, TEXT_CP866
-        call    show_status
+        mcall   SF_RD_TO_FLOPPY, FLOPPY_A
+        test    eax, eax
+        jz      report
+
+        mov     eax, ERR_DEVICE
+        jmp     report
+
+save:
+        call    show_saving
         call    do_save
+
+; eax = the result of the save
+report:
         test    eax, eax
         jz      .ok
 
-        mov     esi, [err_msgs+eax*4]
-        mov     ecx, TEXT_CP866 or 0x00AA0000
-        call    show_status
+        ; the rule found no target: ask
+        cmp     eax, RD_ERR_NO_MEDIUM
+        jne     .failed
+        cmp     [picked], 0
+        je      select
+
+.failed:
+        mov     eax, [err_msgs + eax*4]
+        mov     [status_text], eax
+        mov     [status_color], COLOR_ERROR
+        call    draw_status
         jmp     still
 
-        .ok:
-        cmp     [use_boot], 0           ; only file targets are remembered
-        jne     @f
-        call    check_floppy_prefix
-        je      @f
+.ok:
+        mov     [status_text], msg_ok
+        mov     [status_color], COLOR_OK
+        call    draw_status
+
+        cmp     [autoclose], 0
+        je      still
+
+        mcall   SF_SLEEP, CLOSE_DELAY
+        jmp     exit
+
+show_saving:
+        mov     eax, [sc.work_text]
+        mov     [status_text], msg_saving
+        mov     [status_color], eax
+        jmp     draw_status
+
+; ====================================================================
+
+include "save.inc"
+
+; ZF if the kernel knows the boot medium
+has_boot_medium:
+        cmp     [boot_src], RD_LOAD_FROM_FLOPPY
+        je      .done
+        cmp     [boot_src], RD_LOAD_FROM_HD
+
+.done:
+        ret
+
+; eax = the result code
+do_save:
+        cmp     [picked], 0
+        jne     .picked
+
+        call    rd_save
+        jmp     .clamp
+
+.picked:
+        call    has_boot_medium
+        je      .write
+
+        ; before the save, so that the saved image has the path
         stdcall string.length, fname_buf
         invoke  ini_set_str, ini_file, ini_sec, key_path, fname_buf, eax
 
-        @@:
-        mov     esi, msg_ok
-        mov     ecx, TEXT_CP866 or 0x0000AA00
-        call    show_status
-        cmp     [autoclose], 1
-        jne     still
-        mcall   SF_SLEEP, 100
-        jmp     exit
+.write:
+        mcall   SF_SYSTEM, SSF_RD_TO_HDD, fname_buf
 
-;---------------------------------------------------------------------
+.clamp:
+        cmp     eax, ERR_DEVICE
+        jbe     .done
 
-; in: esi = text, ecx = color with the charset flags
-show_status:
-        push    ecx esi
-        mcall   SF_DRAW_RECT, <8, WIN_W-16>, <STATUS_Y-2, 18>, [sc.work]
-        pop     edx ecx
-        mcall   SF_DRAW_TEXT, <LABEL_X, STATUS_Y>
+        mov     eax, ERR_UNKNOWN
+
+.done:
         ret
 
-; choose the target description for the window -> edx (clobbers eax)
-pick_target_text:
-        mov     edx, tgt_boot
-        cmp     [use_boot], 0
-        jne     .done
-
-        mov     edx, tgt_none
-        cmp     byte [fname_buf], 0
-        je      .done
-
-        mov     edx, tgt_floppy
-        call    check_floppy_prefix
-        je      .done
-
-        mov     edx, fname_buf          ; fn 4 clips at the window edge
-
-        .done:
-        ret
-
-;---------------------------------------------------------------------
+; ====================================================================
 
 draw_window:
         mcall   SF_STYLE_SETTINGS, SSF_GET_COLORS, sc, sizeof.system_colors
         mcall   SF_REDRAW, SSF_BEGIN_DRAW
 
         mcall   SF_STYLE_SETTINGS, SSF_GET_SKIN_HEIGHT
-        mov     ecx, 200*65536 + WIN_CH
-        add     ecx, eax
+        lea     ecx, [eax + (WINDOW_Y shl 16) + WINDOW_H]
         mov     edx, [sc.work]
-        or      edx, 0x34000000
-        mcall   SF_CREATE_WINDOW, <200, WIN_W>, , , , title
+        or      edx, WINDOW_STYLE
+        mcall   SF_CREATE_WINDOW, <WINDOW_X, WINDOW_W>, , , 0, title
 
         mov     ecx, [sc.work_text]
-        or      ecx, TEXT_CP866
-        mcall   SF_DRAW_TEXT, <LABEL_X, 10>, , lab_boot
-        mov     eax, [boot_src]
-        cmp     eax, 5
-        jbe     @f
-        xor     eax, eax
+        or      ecx, FONT
+        mcall   SF_DRAW_TEXT, <GAP, TARGET_Y>, , lab_target
+        call    draw_target
 
-        @@:
-        mov     edx, [boot_names+eax*4]
-        mcall   SF_DRAW_TEXT, <VALUE_X, 10>
-        mcall   SF_DRAW_TEXT, <LABEL_X, 30>, , lab_target
-        call    pick_target_text
-        mcall   SF_DRAW_TEXT, <VALUE_X, 30>
+        mov     edi, buttons
 
-        mcall   SF_DEFINE_BUTTON, <10, 110>, <BTN_Y, 24>, BTN_SAVE, [sc.work_button]
-        mcall   SF_DEFINE_BUTTON, <130, 140>, <BTN_Y, 24>, BTN_SELECT, [sc.work_button]
-        stdcall draw_btn_label, btn_save_t, 10, 110
-        stdcall draw_btn_label, btn_select_t, 130, 140
+.button:
+        mov     ebx, [edi + BUTTON.x]
+        shl     ebx, 16
+        add     ebx, BTN_W
+        movzx   edx, [edi + BUTTON.id]
+        mcall   SF_DEFINE_BUTTON, , <BTN_Y, BTN_H>, , [sc.work_button]
+
+        mov     ebx, [edi + BUTTON.x]
+        add     ebx, GAP
+        shl     ebx, 16
+        add     ebx, BTN_Y + BTN_TEXT_DY
+        mov     ecx, [sc.work_button_text]
+        or      ecx, FONT
+        mcall   SF_DRAW_TEXT, , , [edi + BUTTON.caption]
+
+        add     edi, sizeof.BUTTON
+        cmp     edi, buttons_end
+        jb      .button
+
+        call    draw_status
 
         mcall   SF_REDRAW, SSF_END_DRAW
+
         ret
 
-proc draw_btn_label txt:dword, x:dword, w:dword
-        stdcall string.length, [txt]    ; CP866: one byte per character
-        shl     eax, 3                  ; text width, 8 px per character
-        mov     ebx, [w]
-        sub     ebx, eax
-        sar     ebx, 1
-        add     ebx, [x]
-        shl     ebx, 16
-        add     ebx, BTN_Y+5
-        mov     ecx, [sc.work_button_text]
-        or      ecx, TEXT_CP866
-        mcall   SF_DRAW_TEXT, , , [txt]
+; what the Save button writes to; a path is in cp866, not UTF-8
+draw_target:
+        cmp     [picked], 0
+        jne     .path
+
+        mov     edx, tgt_boot
+        call    has_boot_medium
+        je      .text
+
+        mov     edx, tgt_none
+        cmp     byte [fname_buf], 0
+        je      .text
+
+.path:
+        mov     edx, fname_buf
+        mov     ecx, FONT_CP866
+        jmp     .draw
+
+.text:
+        mov     ecx, FONT
+
+.draw:
+        or      ecx, [sc.work_text]
+        mcall   SF_DRAW_TEXT, <VALUE_X, TARGET_Y>
+
         ret
-endp
 
-;---------------------------------------------------------------------
-;---  Data  ----------------------------------------------------------
-;---------------------------------------------------------------------
+draw_status:
+        mov     edx, [status_text]
+        test    edx, edx
+        jz      .done
 
-if lang eq ru_RU
-        lab_boot     cp866 'Источник загрузки:',0
-        lab_target   cp866 'Сохранить в:',0
-        src_unknown  cp866 'неизвестно',0
-        src_floppy   cp866 'дискета A',0
-        src_hd       cp866 'жёсткий диск',0
-        src_memory   cp866 'образ в памяти',0
-        src_format   cp866 'пустой рамдиск',0
-        src_none     cp866 'нет рамдиска',0
-        tgt_boot     cp866 'загрузочный носитель',0
-        tgt_floppy   cp866 'дискета A',0
-        tgt_none     cp866 'путь не выбран',0
-        btn_save_t   cp866 'Сохранить',0
-        btn_select_t cp866 'Выбрать файл...',0
-        msg_saving   cp866 'Сохранение образа...',0
-        msg_ok       cp866 'Образ сохранён успешно ',0
-        err_prefix   cp866 'Ошибка: ',0
-        e1           cp866 'не определена база и/или раздел жёсткого диска',0
-        e2           cp866 'функция не поддерживается данной файловой системой',0
-        e3           cp866 'неизвестная файловая система',0
-        e4           cp866 'зарезервировано (код 4)',0
-        e5           cp866 'неверный путь',0
-        e6           cp866 'файл закончился',0
-        e7           cp866 'указатель вне памяти приложения',0
-        e8           cp866 'диск переполнен',0
-        e9           cp866 'файловая структура разрушена',0
-        e10          cp866 'доступ запрещён',0
-        e11          cp866 'ошибка устройства',0
-        eNoPath      cp866 'путь не выбран',0
-        eItself      cp866 'нельзя сохранять образ на самого себя',0
-        eUnknown     cp866 'неизвестная ошибка',0
-else if lang eq es_ES
-        lab_boot     cp850 'Origen de arranque:',0
-        lab_target   cp850 'Guardar en:',0
-        src_unknown  cp850 'desconocido',0
-        src_floppy   cp850 'disquete A',0
-        src_hd       cp850 'disco duro',0
-        src_memory   cp850 'imagen en memoria',0
-        src_format   cp850 'ramdisk vacío',0
-        src_none     cp850 'sin ramdisk',0
-        tgt_boot     cp850 'medio de arranque',0
-        tgt_floppy   cp850 'disquete A',0
-        tgt_none     cp850 'ruta no seleccionada',0
-        btn_save_t   cp850 'Guardar',0
-        btn_select_t cp850 'Elegir archivo...',0
-        msg_saving   cp850 'Guardando la imagen...',0
-        msg_ok       cp850 'Imagen guardada con éxito ',0
-        err_prefix   cp850 'Error: ',0
-        e1           cp850 'base y/o partición del disco duro no definida',0
-        e2           cp850 'el sistema de archivos no soporta esta función',0
-        e3           cp850 'sistema de archivos desconocido',0
-        e4           cp850 'reservado (código 4)',0
-        e5           cp850 'ruta incorrecta',0
-        e6           cp850 'fin de archivo',0
-        e7           cp850 'el puntero está fuera de la memoria de la aplicación',0
-        e8           cp850 'disco lleno',0
-        e9           cp850 'estructura de archivos dañada',0
-        e10          cp850 'acceso denegado',0
-        e11          cp850 'error de dispositivo',0
-        eNoPath      cp850 'ruta no seleccionada',0
-        eItself      cp850 'no se puede guardar la imagen sobre sí misma',0
-        eUnknown     cp850 'error desconocido',0
-else ; Default to en_US
-        lab_boot     db 'Boot source:',0
-        lab_target   db 'Save to:',0
-        src_unknown  db 'unknown',0
-        src_floppy   db 'floppy A',0
-        src_hd       db 'hard disk',0
-        src_memory   db 'image in memory',0
-        src_format   db 'empty ramdisk',0
-        src_none     db 'no ramdisk',0
-        tgt_boot     db 'boot medium',0
-        tgt_floppy   db 'floppy A',0
-        tgt_none     db 'path not selected',0
-        btn_save_t   db 'Save',0
-        btn_select_t db 'Select file...',0
-        msg_saving   db 'Saving the image...',0
-        msg_ok       db 'Image saved successfully ',0
-        err_prefix   db 'Error: ',0
-        e1           db 'hard disk base and/or partition not defined',0
-        e2           db 'the file system does not support this function',0
-        e3           db 'unknown file system',0
-        e4           db 'reserved (code 4)',0
-        e5           db 'incorrect path',0
-        e6           db 'end of file',0
-        e7           db 'pointer is outside of application memory',0
-        e8           db 'disk is full',0
-        e9           db 'file structure is destroyed',0
-        e10          db 'access denied',0
-        e11          db 'device error',0
-        eNoPath      db 'path not selected',0
-        eItself      db "you can't save the image onto itself",0
-        eUnknown     db 'unknown error',0
-end if
+        mcall   SF_DRAW_RECT, <GAP, CLIENT_W - 2*GAP>, <STATUS_Y, FONT_CHAR_H>, [sc.work]
 
-title db appname, version, 0
+        mov     ecx, [status_color]
+        or      ecx, FONT
+        mcall   SF_DRAW_TEXT, <GAP, STATUS_Y>, , [status_text]
 
-;---------------------------------------------------------------------
+.done:
+        ret
 
-align 4
+; ====================================================================
+
+; layout; BTN_W is after the captions
+GAP         = 10
+TARGET_Y    = GAP
+VALUE_X     = GAP + (lab_target.chars + 1)*FONT_CHAR_W
+BTN_Y       = TARGET_Y + FONT_CHAR_H + GAP
+BTN_H       = 24
+BTN_TEXT_DY = (BTN_H - FONT_CHAR_H)/2
+BTN_COL1    = GAP
+BTN_COL2    = BTN_COL1 + BTN_W + GAP
+BTN_COL3    = BTN_COL2 + BTN_W + GAP
+STATUS_Y    = BTN_Y + BTN_H + GAP
+
+; window
+CLIENT_W    = BTN_COL3 + BTN_W + GAP
+CLIENT_H    = STATUS_Y + FONT_CHAR_H + GAP
+WINDOW_X    = 200
+WINDOW_Y    = 200
+WINDOW_W    = CLIENT_W + 9                      ; borders 5 + 5, the kernel adds a pixel
+WINDOW_H    = CLIENT_H + 4                      ; border 5, the same pixel; redraw adds the skin
+WINDOW_STYLE = 0x34000000                       ; skinned, fixed size, caption, client coordinates
+
+; text
+FONT        = 0xB0000000                        ; zero terminated, 8x16 UTF-8
+FONT_CP866  = 0x90000000                        ; zero terminated, 8x16 cp866
+FONT_CHAR_W = 8
+FONT_CHAR_H = 16
+
+; colors
+COLOR_ERROR = 0xAA0000
+COLOR_OK    = 0x00AA00
+
+; buttons
+BTN_CLOSE   = 1
+BTN_SAVE    = 2
+BTN_SELECT  = 3
+BTN_FLOPPY  = 4
+
+; keys
+KEY_ENTER   = 13
+KEY_ESC     = 27
+
+; results of a save beyond the file system errors, indexes of err_msgs
+ERR_DEVICE  = 11
+ERR_UNKNOWN = 12
+
+FLOPPY_A    = 1                                 ; SF 16: the first drive
+CLOSE_DELAY = 100                               ; 1/100 s
+
+; proc_lib OpenDialog
+OPENDIALOG_SAVE = 1
+OPENDIALOG_OK   = 1
+DIALOG_X    = 200
+DIALOG_Y    = 120
+DIALOG_W    = 420
+DIALOG_H    = 320
+NAME_MAX    = 256
+PROCINFO_SIZE = 1024
+
+; ====================================================================
+
+struct BUTTON
+        x               dd ?
+        id              db ?
+        caption         dd ?
+ends
+
+macro button_row x, id, caption
+{
+        local   start
+start:
+        dd      x
+        db      id
+        dd      caption
+        assert  $ - start = sizeof.BUTTON
+}
+
+; a text and the number of its characters: its bytes but the ones that go
+; on with a character, 10xxxxxx; CAPTION_MAX is the longest
+CAPTION_MAX = 0
+
+struc caption string
+{
+        local   n, b
+
+        . db    string, 0
+
+        n = 0
+        repeat  $ - . - 1
+                load    b byte from . + % - 1
+                if b shr 6 <> 10b
+                        n = n + 1
+                end if
+        end repeat
+        .chars = n
+
+        if n > CAPTION_MAX
+                CAPTION_MAX = n
+        end if
+}
+
+; ====================================================================
+
+title           db "RDsave 2.0", 0
+
+buttons:
+        ;          x         id          caption
+        button_row BTN_COL1, BTN_SAVE,   btn_save
+        button_row BTN_COL2, BTN_SELECT, btn_select
+        button_row BTN_COL3, BTN_FLOPPY, btn_floppy
+buttons_end:
+
 err_msgs:
-        dd msg_ok, e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11
-        dd eNoPath, eItself, eUnknown
+        dd msg_ok, e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, e11, e_unknown
 
-boot_names:
-        dd src_unknown, src_floppy, src_hd, src_memory, src_format, src_none
+key_autoclose   db "autoclose", 0
+default_name    db "kolibri.img", 0
 
-ini_file      db '/sys/settings/app.ini',0
-ini_sec       db 'RDSave',0
-key_path      db 'path',0
-key_autoclose db 'autoclose',0
-path_default  db 0
-def_fname     db 'kolibri.img',0
-
-ntf_head      db '"RDsave\n',0
-ntf_end_ok    db '" -tO',0
-ntf_end_err   db '" -tE',0
-
-notify_finfo:
-        dd 7, 0, ntf_msg, 0, 0
-        db '/sys/@notify',0
-
-;---------------------------------------------------------------------
-
-align 4
 importLib:
-library libini, 'libini.obj', proclib, 'proc_lib.obj'
+library libini, "libini.obj", proclib, "proc_lib.obj"
 
 import  libini, \
-        ini_get_str, 'ini_get_str', \
-        ini_get_int, 'ini_get_int', \
-        ini_set_str, 'ini_set_str'
+        ini_get_str, "ini_get_str", \
+        ini_get_int, "ini_get_int", \
+        ini_set_str, "ini_set_str"
 
 import  proclib, \
-        OpenDialog_Init,  'OpenDialog_init', \
-        OpenDialog_Start, 'OpenDialog_start'
-
-;---------------------------------------------------------------------
+        OpenDialog_Init, "OpenDialog_init", \
+        OpenDialog_Start, "OpenDialog_start"
 
 OpenDialog_data:
-        .type             dd 1                  ; Save
-        .procinfo         dd procinfo
-        .com_area_name    dd communication_area_name
-        .com_area         dd 0
-        .opendir_path     dd temp_dir_path
-        .dir_default_path dd communication_area_default_path
-        .start_path       dd open_dialog_path
-        .draw_window      dd draw_window
-        .status           dd 0
-        .openfile_path    dd dialog_path        ; kept empty of the ini path so
-                                                ; a stale folder never opens
-        .filename_area    dd filename_area
-        .filter_area      dd Filter
-        .x:
-        .x_size           dw 420
-        .x_start          dw 200
-        .y:
-        .y_size           dw 320
-        .y_start          dw 120
+        .type           dd OPENDIALOG_SAVE
+        .procinfo       dd procinfo
+        .com_area_name  dd opendialog_area
+        .com_area       dd 0
+        .opendir_path   dd temp_dir_path
+        .default_dir    dd opendialog_dir
+        .start_path     dd opendialog_path
+        .draw_window    dd draw_window
+        .status         dd 0
+        .openfile_path  dd dialog_path
+        .filename_area  dd filename_area
+        .filter_area    dd filter
+        .x_size         dw DIALOG_W
+        .x_start        dw DIALOG_X
+        .y_size         dw DIALOG_H
+        .y_start        dw DIALOG_Y
 
-communication_area_name db 'FFFFFFFF_open_dialog',0
+opendialog_area db "FFFFFFFF_open_dialog", 0
+opendialog_path db "/sys/File Managers/opendial", 0
+opendialog_dir  db "/", 0
 
-open_dialog_path:
-if __nightbuild eq yes
-        db '/sys/MANAGERS/opendial',0
-else
-        db '/sys/File Managers/opendial',0
-end if
-
-communication_area_default_path db '/',0
-
-Filter:
-        dd Filter.end - Filter
-        db 'IMG',0
-        db 'IMA',0
-        .end:
+filter:
+        dd .end - filter
+        db "IMG", 0
+        db "IMA", 0
+.end:
         db 0
 
-;---------------------------------------------------------------------
+; ====================================================================
 
-IM_END:
+if lang eq ru_RU
+
+lab_target      caption "Сохранить в:"
+btn_save        caption "Сохранить"
+btn_select      caption "Выбрать файл..."
+btn_floppy      caption "На дискету A"
+tgt_boot        db "загрузочный носитель", 0
+tgt_none        db "путь не выбран", 0
+msg_saving      db "Сохранение образа...", 0
+msg_ok          db "Образ сохранён успешно", 0
+e1              db "не определена база и/или раздел жёсткого диска", 0
+e2              db "функция не поддерживается данной файловой системой", 0
+e3              db "неизвестная файловая система", 0
+e4              db "зарезервировано (код 4)", 0
+e5              db "неверный путь", 0
+e6              db "файл закончился", 0
+e7              db "указатель вне памяти приложения", 0
+e8              db "диск переполнен", 0
+e9              db "файловая структура разрушена", 0
+e10             db "доступ запрещён", 0
+e11             db "ошибка устройства", 0
+e_unknown       db "неизвестная ошибка", 0
+
+else if lang eq es_ES
+
+lab_target      caption "Guardar en:"
+btn_save        caption "Guardar"
+btn_select      caption "Elegir archivo..."
+btn_floppy      caption "Al disquete A"
+tgt_boot        db "medio de arranque", 0
+tgt_none        db "ruta no seleccionada", 0
+msg_saving      db "Guardando la imagen...", 0
+msg_ok          db "Imagen guardada con éxito", 0
+e1              db "base y/o partición del disco duro no definida", 0
+e2              db "el sistema de archivos no soporta esta función", 0
+e3              db "sistema de archivos desconocido", 0
+e4              db "reservado (código 4)", 0
+e5              db "ruta incorrecta", 0
+e6              db "fin de archivo", 0
+e7              db "el puntero está fuera de la memoria de la aplicación", 0
+e8              db "disco lleno", 0
+e9              db "estructura de archivos dañada", 0
+e10             db "acceso denegado", 0
+e11             db "error de dispositivo", 0
+e_unknown       db "error desconocido", 0
+
+else
+
+lab_target      caption "Save to:"
+btn_save        caption "Save"
+btn_select      caption "Select file..."
+btn_floppy      caption "To floppy A"
+tgt_boot        db "boot medium", 0
+tgt_none        db "path not selected", 0
+msg_saving      db "Saving the image...", 0
+msg_ok          db "Image saved successfully", 0
+e1              db "hard disk base and/or partition not defined", 0
+e2              db "the file system does not support this function", 0
+e3              db "unknown file system", 0
+e4              db "reserved (code 4)", 0
+e5              db "incorrect path", 0
+e6              db "end of file", 0
+e7              db "pointer is outside of application memory", 0
+e8              db "disk is full", 0
+e9              db "file structure is destroyed", 0
+e10             db "access denied", 0
+e11             db "device error", 0
+e_unknown       db "unknown error", 0
+
+end if
+
+; a button fits the longest caption
+BTN_W       = CAPTION_MAX*FONT_CHAR_W + 2*GAP
+
+; ====================================================================
 
 align 4
-boot_src  rd 1
-autoclose rd 1
-use_boot  rd 1
+boot_src        rd 1
+autoclose       rd 1
+picked          rd 1
+status_text     rd 1
+status_color    rd 1
 
-sc system_colors
+sc              system_colors
 
-PARAMS        rb 256
-fname_buf     rb 4096
-dialog_path   rb 4096
-ntf_msg       rb 1152
-cur_dir_path  rb 4096
-temp_dir_path rb 4096
-filename_area rb 256
-procinfo      rb 1024
-
-;---------------------------------------------------------------------
-
-align 32
-        rb 4096
-stacktop:
-I_END:
+fname_buf       rb PATH_MAX
+dialog_path     rb PATH_MAX
+temp_dir_path   rb PATH_MAX
+filename_area   rb NAME_MAX
+procinfo        rb PROCINFO_SIZE
