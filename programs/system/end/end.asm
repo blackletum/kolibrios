@@ -21,14 +21,13 @@ include "../../proc32.inc"
 
 ; ====================================================================
 
+; the kernel has made the heap, linking libini
 START:
-        mcall   SF_SYS_MISC, SSF_HEAP_INIT
-
         ; the skin of system.ini: the colours of the frame of an active
         ; window and the base bitmap of its caption; the kernel unpacks a
         ; packed skin file
-        invoke  ini_get_str, system_ini, sec_style, key_skin, skin_path, NAME_MAX, ini_no_path
-        mcall   SF_SYS_MISC, SSF_LOAD_FILE, skin_path
+        invoke  ini_get_str, system_ini, sec_style, key_skin, fname_buf, PATH_MAX, ini_no_path
+        mcall   SF_SYS_MISC, SSF_LOAD_FILE, fname_buf
         test    eax, eax
         jz      .window
         cmp     dword [eax + SKIN_IDENT], SKIN_SIGN
@@ -127,10 +126,9 @@ button:
         cmp     ah, BTN_AUTOSAVE
         je      toggle_autosave
 
-; ah = SSSF_SHUTDOWN_*
+; ah = SSSF_SHUTDOWN_*, kept in ebp
 shutdown:
-        movzx   eax, ah
-        mov     [shutdown_code], eax
+        movzx   ebp, ah
 
         cmp     [autosave], 0
         je      .off
@@ -150,13 +148,12 @@ shutdown:
         jmp     exit
 
 .off:
-        mcall   SF_SYSTEM, SSF_SHUTDOWN, [shutdown_code]
+        mcall   SF_SYSTEM, SSF_SHUTDOWN, ebp
 
 exit:
         mcall   SF_TERMINATE_PROCESS
 
-; the checkbox starts off each time: a "no" could not be kept, as only a
-; save writes the RAM-disk back; its look is its button, so the window again
+; the checkbox is a button, so all of it again
 toggle_autosave:
         xor     [autosave], 1
         jmp     redraw
@@ -171,9 +168,9 @@ draw_window:
         mcall   SF_REDRAW, SSF_BEGIN_DRAW
         mcall   SF_STYLE_SETTINGS, SSF_GET_COLORS, sc, sizeof.system_colors
 
-        ; the button colours as in TaskMan: blue the channels of work_button
-        ; high to low as blue, green, red; green and red half the high one,
-        ; the high one in green, in red
+        ; as in TaskMan: blue is work_button, its channels sorted high to
+        ; blue, mid to green, low to red; green and red are half the high
+        ; one, the high one in green, in red
         mov     eax, [sc.work_button]   ; high, mid, low -> al, ah, dl
         mov     edx, eax
         shr     edx, 16
@@ -218,16 +215,8 @@ draw_window:
         lea     ebx, [eax + DIALOG_W - 1]
         mcall   SF_CREATE_WINDOW, , , WINDOW_STYLE, WINDOW_UNMOVABLE
 
-        ; the frame of a window of the skin: a line of outer round all of
-        ; it and under the header; under that, as the kernel draws it under
-        ; a caption, three lines of frame and one of inner; an inner line as
-        ; the frame is not seen, so work_graph instead keeps an edge
-        mov     eax, [frame_middle]
-        cmp     eax, [frame_inner]
-        jne     @f
-        mov     eax, [sc.work_graph]
-        mov     [frame_inner], eax
-@@:
+        ; the frame of the skin: outer round all and under the header, then
+        ; under the header three lines of frame and one of inner
         mov     ebx, DIALOG_W
         mov     ecx, DIALOG_H
         mov     edx, [frame_outer]
@@ -241,9 +230,13 @@ draw_window:
         call    ring
         call    ring
         mov     edx, [frame_inner]
+        cmp     edx, [frame_middle]
+        jne     @f
+        mov     edx, [sc.work_graph]    ; an inner line as the frame keeps an edge
+@@:
         call    ring
 
-        mcall   SF_DRAW_RECT, <FRAME, INNER_W>, <HEADER_LINE_Y + 1, DIALOG_H - FRAME - HEADER_LINE_Y - 1>, [sc.work_light]
+        mcall   SF_DRAW_RECT, , , [sc.work_light] ; the box inside the frame
 
         call    draw_header
 
@@ -320,10 +313,11 @@ draw_header:
 @@:
         xor     ebp, ebp                ; the row of the header
 
+        ; its row of the bitmap, past the rows that look as a frame
 .row:
-        mov     eax, ebp                ; its row of the bitmap, past the
-        mov     ecx, [skin_h]           ; rows at its edges that look as the
-        sub     ecx, SKIN_TOP + SKIN_BOTTOM ; frame of a window
+        mov     eax, ebp
+        mov     ecx, [skin_h]
+        sub     ecx, SKIN_TOP + SKIN_BOTTOM
         mul     ecx
         mov     ecx, HEADER_H
         div     ecx
@@ -348,9 +342,7 @@ draw_header:
 
 .put:
         lea     edx, [ebp + (1 shl 16) + 1]
-        push    ebp
         mcall   SF_PUT_IMAGE, row_buf, <HEADER_W, 1>
-        pop     ebp
         inc     ebp
         cmp     ebp, HEADER_H
         jb      .row
@@ -401,7 +393,7 @@ draw_checkbox:
         mov     edx, [sc.work_graph]
         call    sunken_box
 
-        ; inside the frame: the kernel inverts the light lines there
+        ; inside the frame, the kernel inverts its press frame on the field
         mcall   SF_DEFINE_BUTTON, <CHECK_X + 1, CHECK_SIZE - 3>, <CHECK_Y + 1, CHECK_SIZE - 3>, BTN_AUTOSAVE + BT_HIDE
         ret
 
@@ -517,7 +509,6 @@ ROW_H       = 24
 TEXT_DY     = (ROW_H - FONT_CAPS_H)/2 - FONT_CAPS_Y ; the capitals centred in a row
 FRAME       = 5                                 ; as a window of the skin
 INNER       = FRAME + GAP
-INNER_W     = DIALOG_W - 2*FRAME
 
 ; the header inside the outer line, as the caption of a window, a line
 ; of outer under it: the capitals of the title in the double font GAP
@@ -560,8 +551,7 @@ BTN_COL1    = INNER
 BTN_COL2    = BTN_COL1 + BTN_W + GAP
 BTN_COL3    = BTN_COL2 + BTN_W + GAP
 
-; Cancel GAP under the buttons; the kernel makes a button a pixel higher,
-; so it looks ROW_H
+; Cancel GAP under the buttons
 CANCEL_Y    = BTN_Y + BTN_H + GAP
 CANCEL_W    = DIALOG_W - 2*INNER
 
@@ -608,7 +598,6 @@ BITMAP_BASE = 3                                 ; the middle of the caption
 BITMAP_INACTIVE = 0
 SKIN_TOP    = 2                                 ; rows of a caption that look as a frame
 SKIN_BOTTOM = 1
-NAME_MAX    = 256
 
 ; buttons: the ids of the shutdown buttons are their SSSF_SHUTDOWN_*
 BTN_CANCEL   = 1
@@ -751,7 +740,6 @@ assert TITLE_W <= DIALOG_W - 2*INNER
 
 align 4
 autosave        rd 1
-shutdown_code   rd 1
 blue            rd 1
 green           rd 1
 red             rd 1
@@ -764,6 +752,5 @@ skin_h          rd 1
 
 sc              system_colors
 
-fname_buf       rb PATH_MAX
-skin_path       rb NAME_MAX
+fname_buf       rb PATH_MAX                     ; the skin path, at the end the RDsave one
 row_buf         rb HEADER_W*3                   ; a row of the header, BGR

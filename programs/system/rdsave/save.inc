@@ -7,7 +7,6 @@ RD_ERR_NO_MEDIUM = 2                            ; SF 18.6: unknown or read-only
 ; fname_buf <- the path from the ini, empty if there is none
 rd_read_path:
         invoke  ini_get_str, ini_file, ini_sec, key_path, fname_buf, PATH_MAX, ini_no_path
-
         ret
 
 ; fname_buf = the path from the ini or empty: eax = 0 or a file system error
