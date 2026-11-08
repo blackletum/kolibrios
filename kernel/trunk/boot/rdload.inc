@@ -101,6 +101,7 @@ read_image:
 
 no_sys_on_hd:
         DEBUGF 1, "K : RD not found\n"
+        mov     byte [BOOT.rd_load_from], RD_LOAD_FROM_NONE
 .1:
         ; test_to_format_ram_disk (need if not using ram disk)
         cmp     byte [BOOT.rd_load_from], RD_LOAD_FROM_FORMAT

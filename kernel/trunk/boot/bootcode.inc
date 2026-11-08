@@ -1100,6 +1100,7 @@ mem_floor_ok:
         test    byte [ds:si+10], 40h ; check ATAPI device
         pop     ds
         jz      .nocd
+        mov     [es:BOOT_LO.rd_load_from], RD_LOAD_FROM_MEMORY  ; SF 18.6 must not write to a real floppy
 
 ; yes - read all floppy by 18 sectors
 
@@ -1401,6 +1402,7 @@ no_sys_on_floppy:
 if defined extended_primary_loader
         cmp     [es:BOOT_LO.rd_load_from], RD_LOAD_FROM_HD
         jne     no_sys_from_primary
+        mov     [es:BOOT_LO.rd_load_from], RD_LOAD_FROM_MEMORY  ; SF 18.6 cannot write through the loader
 ; load kolibri.img using callback from primary loader
         and     word [movedesc + 24 + 2], 0
         mov     byte [movedesc + 24 + 4], 10h

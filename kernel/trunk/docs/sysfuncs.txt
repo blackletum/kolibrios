@@ -781,8 +781,8 @@ Remarks:
   * For ecx = 0: if the ramdisk was not loaded from a writable
     medium (e.g. it was preloaded to memory by the loader), function
     returns value 2; a failed floppy write returns value 11.
-  * The boot source device can be checked in advance with
-    subfunction 13 of function 26.
+  * After a kernel restart the image counts as preloaded to memory.
+  * If there is no ramdisk, function returns value 2 for any ecx.
 
 ---------------------- Constants for registers: ----------------------
   eax - SF_SYSTEM (18)
@@ -1656,12 +1656,14 @@ Returned value:
   * eax = device the ramdisk image was loaded from at boot:
     * 1 = floppy drive
     * 2 = hard disk partition
-    * 3 = image preloaded to memory by the loader
+    * 3 = image in memory that function 18.6 cannot write back
+      (preloaded by the loader, read from a CD, or after a kernel
+      restart)
     * 4 = ramdisk was created empty (formatted at boot)
     * 5 = no ramdisk
 Remarks:
-  * To save the ramdisk back to the boot medium use function 18.6
-    with ecx = 0; it succeeds for values 1 and 2.
+  * The value is informational: to save the ramdisk back to the boot
+    medium call function 18.6 with ecx = 0 and check its result.
 
 ---------------------- Constants for registers: ----------------------
   eax - SF_SYSTEM_GET (26)
